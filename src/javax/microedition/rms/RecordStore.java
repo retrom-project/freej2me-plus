@@ -35,6 +35,7 @@ import java.util.Vector;
 
 import org.recompile.mobile.Base64Util;
 import org.recompile.mobile.Mobile;
+import org.recompile.mobile.MobilePlatform;
 
 public class RecordStore
 {
@@ -339,8 +340,19 @@ public class RecordStore
 				}
 			}
 
-			// Doesn't exist, throw the exception.
-			if (!exists) { throw new RecordStoreNotFoundException("RecordStore not found: " + recordStoreName); }
+			// Several older MIDlets replace saves by deleting the store before the
+			// first write and assume that deleting a missing store is idempotent.
+			// Match that widely deployed behavior in the miniJVM/web frontend while
+			// retaining the stricter MIDP behavior for the regular frontends.
+			if (!exists)
+			{
+				if (MobilePlatform.isMiniJvm)
+				{
+					Mobile.log(Mobile.LOG_WARNING, RecordStore.class.getPackage().getName() + "." + RecordStore.class.getSimpleName() + ": RecordStore does not exist: " + recordStoreName);
+					return;
+				}
+				throw new RecordStoreNotFoundException("RecordStore not found: " + recordStoreName);
+			}
 		}
 		catch (Exception e)
 		{
