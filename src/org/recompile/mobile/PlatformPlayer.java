@@ -153,13 +153,28 @@ public class PlatformPlayer implements Player
 				byte[] data = null;
 				try
 				{
-					data = new byte[stream.available()];
-					stream.read(data, 0, data.length);
+					byte[] buffer = new byte[4096];
+					int length = 0;
+					while(true)
+					{
+						if(length == buffer.length)
+						{
+							byte[] grown = new byte[buffer.length * 2];
+							System.arraycopy(buffer, 0, grown, 0, length);
+							buffer = grown;
+						}
+						int count = stream.read(buffer, length, buffer.length - length);
+						if(count < 0) { break; }
+						if(count == 0) { continue; }
+						length += count;
+					}
+					data = new byte[length];
+					System.arraycopy(buffer, 0, data, 0, length);
 					boolean isMidi = containsAsciiIgnoreCase(contentType, "mid") ||
 						(data.length >= 4 && data[0] == 'M' && data[1] == 'T' && data[2] == 'h' && data[3] == 'd');
 					boolean isPcm = containsAsciiIgnoreCase(contentType, "wav") || containsAsciiIgnoreCase(contentType, "basic") ||
 						(data.length >= 12 && data[0] == 'R' && data[1] == 'I' && data[2] == 'F' && data[3] == 'F' && data[8] == 'W' && data[9] == 'A' && data[10] == 'V' && data[11] == 'E');
-					System.out.println("miniJVM audio bytes=" + data.length + " midi=" + isMidi + " pcm=" + isPcm);
+					System.out.println("miniJVM audio type=" + contentType + " bytes=" + data.length + " midi=" + isMidi + " pcm=" + isPcm);
 					if(isMidi || isPcm)
 					{
 						player = new miniJvmPlayer(data, isMidi);
