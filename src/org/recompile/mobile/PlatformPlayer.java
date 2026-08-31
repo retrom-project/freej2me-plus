@@ -134,7 +134,7 @@ public class PlatformPlayer implements Player
 					ByteArrayOutputStream output = new ByteArrayOutputStream();
 					byte[] buffer = new byte[4096];
 					int count;
-					while((count = stream.read(buffer)) >= 0)
+					while((count = stream.read(buffer, 0, buffer.length)) >= 0)
 					{
 						if(count > 0) { output.write(buffer, 0, count); }
 					}
