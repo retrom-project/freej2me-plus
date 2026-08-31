@@ -113,6 +113,24 @@ public class PlatformPlayer implements Player
 	protected boolean disableControls = false; // For when a given audio format is not supported
 	protected Control[] controls;
 
+	private static boolean containsAsciiIgnoreCase(String value, String needle)
+	{
+		if(value == null || needle == null || needle.length() > value.length()) { return false; }
+		for(int offset = 0; offset <= value.length() - needle.length(); offset++)
+		{
+			boolean matches = true;
+			for(int index = 0; index < needle.length(); index++)
+			{
+				char actual = value.charAt(offset + index);
+				char expected = needle.charAt(index);
+				if(actual >= 'A' && actual <= 'Z') { actual = (char) (actual + ('a' - 'A')); }
+				if(actual != expected) { matches = false; break; }
+			}
+			if(matches) { return true; }
+		}
+		return false;
+	}
+
 	public PlatformPlayer(InputStream stream, String type)
 	{
 		listeners = new Vector<PlayerListener>();
@@ -131,9 +149,9 @@ public class PlatformPlayer implements Player
 				// MIME content types are ASCII and Manager supplies lower-case values.
 				// Avoid locale-dependent String case conversion on compact VMs.
 				String miniType = contentType;
-				boolean declaredMidi = miniType.indexOf("mid") >= 0 || miniType.indexOf("tone") >= 0;
-				boolean declaredPcm = miniType.indexOf("wav") >= 0 || miniType.indexOf("basic") >= 0;
-				if(declaredMidi || declaredPcm || miniType.length() == 0 || miniType.indexOf("octet-stream") >= 0)
+				boolean declaredMidi = containsAsciiIgnoreCase(miniType, "mid") || containsAsciiIgnoreCase(miniType, "tone");
+				boolean declaredPcm = containsAsciiIgnoreCase(miniType, "wav") || containsAsciiIgnoreCase(miniType, "basic");
+				if(declaredMidi || declaredPcm || miniType.length() == 0 || containsAsciiIgnoreCase(miniType, "octet-stream"))
 				{
 					byte[] data = null;
 					try
