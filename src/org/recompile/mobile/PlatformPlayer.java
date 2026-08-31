@@ -17,7 +17,6 @@
 package org.recompile.mobile;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -131,14 +130,8 @@ public class PlatformPlayer implements Player
 				byte[] data = null;
 				try
 				{
-					ByteArrayOutputStream output = new ByteArrayOutputStream();
-					byte[] buffer = new byte[4096];
-					int count;
-					while((count = stream.read(buffer, 0, buffer.length)) >= 0)
-					{
-						if(count > 0) { output.write(buffer, 0, count); }
-					}
-					data = output.toByteArray();
+					data = new byte[stream.available()];
+					stream.read(data, 0, data.length);
 					boolean isMidi = data.length >= 4 && data[0] == 'M' && data[1] == 'T' && data[2] == 'h' && data[3] == 'd';
 					boolean isPcm = data.length >= 12 && data[0] == 'R' && data[1] == 'I' && data[2] == 'F' && data[3] == 'F' && data[8] == 'W' && data[9] == 'A' && data[10] == 'V' && data[11] == 'E';
 					if(isMidi || isPcm)
