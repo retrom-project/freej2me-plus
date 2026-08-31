@@ -19,7 +19,7 @@ import java.io.InputStream;
  */
 public interface MiniJvmAudioBackend
 {
-	public Handle create(InputStream stream) throws Exception;
+	public Handle create(InputStream stream, int remainingLength) throws Exception;
 	public void playTone(int note, int duration, int volume) throws Exception;
 
 	public interface Handle

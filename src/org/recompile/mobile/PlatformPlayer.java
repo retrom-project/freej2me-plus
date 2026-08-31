@@ -709,7 +709,7 @@ public class PlatformPlayer implements Player
 
 		public miniJvmPlayer(InputStream stream) throws Exception
 		{
-			handle = MobilePlatform.miniJvmAudioBackend.create(stream);
+				handle = MobilePlatform.miniJvmAudioBackend.create(stream, stream.available());
 		}
 
 		public void realize() { state = Player.REALIZED; }
