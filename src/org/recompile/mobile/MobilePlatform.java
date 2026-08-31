@@ -67,6 +67,7 @@ public class MobilePlatform
 
 	public static boolean isLibretro = false;
 	public static boolean isMiniJvm = false;
+	public static MiniJvmAudioBackend miniJvmAudioBackend = null;
 	public static boolean appTerminated = false;
 
 	public MIDletLoader loader;

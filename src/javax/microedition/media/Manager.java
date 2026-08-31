@@ -39,6 +39,7 @@ import javax.sound.midi.Synthesizer;
 import javax.microedition.media.protocol.DataSource;
 
 import org.recompile.mobile.Mobile;
+import org.recompile.mobile.MobilePlatform;
 import org.recompile.mobile.PlatformPlayer;
 import org.recompile.mobile.JavaxPlatformPlayer;
 import org.recompile.mobile.SiemensPlatformPlayer;
@@ -159,13 +160,19 @@ public class Manager
 	public static void playTone(final int note, int duration, int volume) throws MediaException
 	{
 		if(Mobile.sound == false) { return; }
-		
-		Mobile.log(Mobile.LOG_DEBUG, Manager.class.getPackage().getName() + "." + Manager.class.getSimpleName() + ": " + "Play Tone");
-
 		if (note < 0 || note > 127) { throw new IllegalArgumentException("playTone: Note value must be between 0 and 127."); }
 		if (duration <= 0) { throw new IllegalArgumentException("playTone: Note duration must be positive and non-zero."); }
-		if (volume < 0) { volume = 0; } 
+		if (volume < 0) { volume = 0; }
 		else if (volume > 100) { volume = 100; }
+
+		if(MobilePlatform.isMiniJvm && MobilePlatform.miniJvmAudioBackend != null)
+		{
+			try { MobilePlatform.miniJvmAudioBackend.playTone(note, duration, volume); }
+			catch(Exception e) { throw new MediaException(e.getMessage()); }
+			return;
+		}
+
+		Mobile.log(Mobile.LOG_DEBUG, Manager.class.getPackage().getName() + "." + Manager.class.getSimpleName() + ": " + "Play Tone");
 
 		final int restoreBankMSB = toneChannel.getController(0);    // Bank MSB
         final int restoreBankLSB = toneChannel.getController(32);   // Bank LSB

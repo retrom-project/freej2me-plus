@@ -119,11 +119,46 @@ public class PlatformPlayer implements Player
 		kddiListeners = new Vector<com.kddi.media.MediaEventListener>();
 		controls = new Control[NUM_CONTROLS];
 
-		contentType = type;
+		contentType = type == null ? "" : type;
 
 		if(Mobile.sound == false) { player = new audioplayer(); }
 		else
 		{
+			boolean miniJvmPlayerCreated = false;
+			if(MobilePlatform.isMiniJvm && MobilePlatform.miniJvmAudioBackend != null)
+			{
+				String miniType = contentType.toLowerCase();
+				boolean declaredMidi = miniType.indexOf("mid") >= 0 || miniType.indexOf("tone") >= 0;
+				boolean declaredPcm = miniType.indexOf("wav") >= 0 || miniType.indexOf("basic") >= 0;
+				if(declaredMidi || declaredPcm || miniType.length() == 0 || miniType.indexOf("octet-stream") >= 0)
+				{
+					byte[] data = null;
+					try
+					{
+						ByteArrayOutputStream output = new ByteArrayOutputStream();
+						byte[] buffer = new byte[4096];
+						int count;
+						while((count = stream.read(buffer)) >= 0)
+						{
+							if(count > 0) { output.write(buffer, 0, count); }
+						}
+						data = output.toByteArray();
+						boolean isMidi = declaredMidi || (data.length >= 4 && data[0] == 'M' && data[1] == 'T' && data[2] == 'h' && data[3] == 'd');
+						boolean isPcm = declaredPcm || (data.length >= 12 && data[0] == 'R' && data[1] == 'I' && data[2] == 'F' && data[3] == 'F' && data[8] == 'W' && data[9] == 'A' && data[10] == 'V' && data[11] == 'E');
+						if(!isMidi && !isPcm) { throw new IOException("Unsupported miniJVM media type: " + contentType); }
+						player = new miniJvmPlayer(data, isMidi);
+						miniJvmPlayerCreated = true;
+					}
+					catch(Exception e)
+					{
+						Mobile.log(Mobile.LOG_ERROR, PlatformPlayer.class.getPackage().getName() + "." + PlatformPlayer.class.getSimpleName() + ": miniJVM media setup failed: " + e.getMessage());
+						if(data != null) { stream = new ByteArrayInputStream(data); }
+					}
+				}
+			}
+
+			if(!miniJvmPlayerCreated)
+			{
 			// Midi player will also play tones, as these are converted to midi in pretty much all cases at the moment
 			if(contentType.toLowerCase().contains("mid") || contentType.toLowerCase().contains("tone")) { player = new midiPlayer(stream); }
 			else if(contentType.toLowerCase().contains("wav")) { player = new wavPlayer(stream); }
@@ -256,6 +291,7 @@ public class PlatformPlayer implements Player
 				{
 					Mobile.log(Mobile.LOG_ERROR, PlatformPlayer.class.getPackage().getName() + "." + PlatformPlayer.class.getSimpleName() + ": " + "Couldn't parse input stream: " + e.getMessage());
 				}
+			}
 			}
 		}
 
@@ -677,6 +713,44 @@ public class PlatformPlayer implements Player
 
 		// For sequence players
 		public Sequence getSequence() { return null; }
+	}
+
+	private class miniJvmPlayer extends audioplayer
+	{
+		private MiniJvmAudioBackend.Handle handle;
+
+		public miniJvmPlayer(byte[] data, boolean midi) throws Exception
+		{
+			handle = midi
+				? MobilePlatform.miniJvmAudioBackend.createMidi(data)
+				: MobilePlatform.miniJvmAudioBackend.createPcm(data);
+		}
+
+		public void realize() { state = Player.REALIZED; }
+		public void prefetch() { state = Player.PREFETCHED; }
+
+		public void start()
+		{
+			handle.start();
+			state = Player.STARTED;
+			notifyListeners(PlayerListener.STARTED, getMediaTime());
+		}
+
+		public void stop()
+		{
+			handle.stop();
+			state = Player.PREFETCHED;
+			notifyListeners(PlayerListener.STOPPED, getMediaTime());
+		}
+
+		public void deallocate() { handle.stop(); }
+		public void close() { handle.close(); }
+		public void setLoopCount(int count) { handle.setLoopCount(count); }
+		public long setMediaTime(long now) { return handle.setMediaTime(now); }
+		public long getMediaTime() { return handle.getMediaTime(); }
+		public long getDuration() { return handle.getDuration(); }
+		public boolean isRunning() { return handle.isRunning(); }
+		public void setVolume(int level) { handle.setVolume(level); }
 	}
 
 	private class midiPlayer extends audioplayer implements MetaEventListener
@@ -1930,7 +2004,11 @@ public class PlatformPlayer implements Player
 
 			try
 			{
-				if (player instanceof midiPlayer)
+				if(player instanceof miniJvmPlayer)
+				{
+					((miniJvmPlayer) player).setVolume(isMuted() ? 0 : level);
+				}
+				else if (player instanceof midiPlayer)
 				{
 					if(((midiPlayer)player).synthesizer == null) { return getLevel(); } // Only make changes if the midi subsystem for this player is available
 
