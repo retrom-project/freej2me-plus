@@ -112,24 +112,6 @@ public class PlatformPlayer implements Player
 	protected boolean disableControls = false; // For when a given audio format is not supported
 	protected Control[] controls;
 
-	private static boolean containsAsciiIgnoreCase(String value, String needle)
-	{
-		if(value == null || needle == null || needle.length() > value.length()) { return false; }
-		for(int offset = 0; offset <= value.length() - needle.length(); offset++)
-		{
-			boolean matches = true;
-			for(int index = 0; index < needle.length(); index++)
-			{
-				char actual = value.charAt(offset + index);
-				char expected = needle.charAt(index);
-				if(actual >= 'A' && actual <= 'Z') { actual = (char) (actual + ('a' - 'A')); }
-				if(actual != expected) { matches = false; break; }
-			}
-			if(matches) { return true; }
-		}
-		return false;
-	}
-
 	public PlatformPlayer(InputStream stream, String type)
 	{
 		listeners = new Vector<PlayerListener>();
@@ -151,19 +133,16 @@ public class PlatformPlayer implements Player
 			{
 				try
 				{
-					boolean isMidi = containsAsciiIgnoreCase(contentType, "mid");
-					boolean isPcm = containsAsciiIgnoreCase(contentType, "wav") || containsAsciiIgnoreCase(contentType, "basic");
-					if(isMidi || isPcm)
-					{
-						player = new miniJvmPlayer(stream, isMidi);
-						miniJvmPlayerCreated = true;
-					}
+					player = new miniJvmPlayer(stream);
 				}
 				catch(Exception e)
 				{
 					Mobile.log(Mobile.LOG_ERROR, PlatformPlayer.class.getPackage().getName() + "." + PlatformPlayer.class.getSimpleName() + ": miniJVM media setup failed: " + e.getMessage());
 					e.printStackTrace();
+					player = new audioplayer();
+					disableControls = true;
 				}
+				miniJvmPlayerCreated = true;
 			}
 
 			if(!miniJvmPlayerCreated)
@@ -728,11 +707,9 @@ public class PlatformPlayer implements Player
 	{
 		private MiniJvmAudioBackend.Handle handle;
 
-		public miniJvmPlayer(InputStream stream, boolean midi) throws Exception
+		public miniJvmPlayer(InputStream stream) throws Exception
 		{
-			handle = midi
-				? MobilePlatform.miniJvmAudioBackend.createMidi(stream)
-				: MobilePlatform.miniJvmAudioBackend.createPcm(stream);
+			handle = MobilePlatform.miniJvmAudioBackend.create(stream);
 		}
 
 		public void realize() { state = Player.REALIZED; }
