@@ -709,7 +709,18 @@ public class PlatformPlayer implements Player
 
 		public miniJvmPlayer(InputStream stream) throws Exception
 		{
-				handle = MobilePlatform.miniJvmAudioBackend.create(stream, stream.available());
+			int remaining = stream.available();
+			if(remaining <= 0) { throw new IOException("Media stream length is unavailable"); }
+			byte[] data = new byte[remaining];
+			int count = stream.read(data, 0, remaining);
+			if(count <= 0) { throw new IOException("Media stream is empty"); }
+			if(count != remaining)
+			{
+				byte[] exact = new byte[count];
+				System.arraycopy(data, 0, exact, 0, count);
+				data = exact;
+			}
+			handle = MobilePlatform.miniJvmAudioBackend.create(data);
 		}
 
 		public void realize() { state = Player.REALIZED; }

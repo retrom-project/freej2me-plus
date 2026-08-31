@@ -8,8 +8,6 @@
  */
 package org.recompile.mobile;
 
-import java.io.InputStream;
-
 /**
  * Small media bridge for runtimes that do not provide Java Sound.
  *
@@ -19,7 +17,7 @@ import java.io.InputStream;
  */
 public interface MiniJvmAudioBackend
 {
-	public Handle create(InputStream stream, int remainingLength) throws Exception;
+	public Handle create(byte[] data) throws Exception;
 	public void playTone(int note, int duration, int volume) throws Exception;
 
 	public interface Handle
