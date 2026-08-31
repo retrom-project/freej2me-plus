@@ -674,6 +674,7 @@ public class MIDletLoader extends URLClassLoader
 			url = findResource(resource);
 			// Read all bytes, return ByteArrayInputStream //
 			InputStream stream = url.openStream();
+			if(MobilePlatform.isMiniJvm) { return stream; }
 
 			ByteArrayOutputStream buffer = new ByteArrayOutputStream();
 			int count=0;
@@ -834,7 +835,8 @@ public class MIDletLoader extends URLClassLoader
 		try
 		{
 			InputStream stream = url.openStream();
-			
+			if(MobilePlatform.isMiniJvm) { return stream; }
+
 			// zb3: why not return a stream? or a bufferedinputstream for marks?
 			
 			ByteArrayOutputStream buffer = new ByteArrayOutputStream();
