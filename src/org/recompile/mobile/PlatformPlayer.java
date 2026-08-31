@@ -149,35 +149,13 @@ public class PlatformPlayer implements Player
 			}
 			if(MobilePlatform.isMiniJvm && MobilePlatform.miniJvmAudioBackend != null)
 			{
-				System.out.println("miniJVM audio probe");
-				byte[] data = null;
 				try
 				{
-					byte[] buffer = new byte[4096];
-					int length = 0;
-					while(true)
-					{
-						if(length == buffer.length)
-						{
-							byte[] grown = new byte[buffer.length * 2];
-							for(int index = 0; index < length; index++) { grown[index] = buffer[index]; }
-							buffer = grown;
-						}
-						int count = stream.read(buffer, length, buffer.length - length);
-						if(count < 0) { break; }
-						if(count == 0) { continue; }
-						length += count;
-					}
-					data = new byte[length];
-					for(int index = 0; index < length; index++) { data[index] = buffer[index]; }
-					boolean isMidi = containsAsciiIgnoreCase(contentType, "mid") ||
-						(data.length >= 4 && data[0] == 'M' && data[1] == 'T' && data[2] == 'h' && data[3] == 'd');
-					boolean isPcm = containsAsciiIgnoreCase(contentType, "wav") || containsAsciiIgnoreCase(contentType, "basic") ||
-						(data.length >= 12 && data[0] == 'R' && data[1] == 'I' && data[2] == 'F' && data[3] == 'F' && data[8] == 'W' && data[9] == 'A' && data[10] == 'V' && data[11] == 'E');
-					System.out.println("miniJVM audio type=" + contentType + " bytes=" + data.length + " midi=" + isMidi + " pcm=" + isPcm);
+					boolean isMidi = containsAsciiIgnoreCase(contentType, "mid");
+					boolean isPcm = containsAsciiIgnoreCase(contentType, "wav") || containsAsciiIgnoreCase(contentType, "basic");
 					if(isMidi || isPcm)
 					{
-						player = new miniJvmPlayer(data, isMidi);
+						player = new miniJvmPlayer(stream, isMidi);
 						miniJvmPlayerCreated = true;
 					}
 				}
@@ -186,7 +164,6 @@ public class PlatformPlayer implements Player
 					Mobile.log(Mobile.LOG_ERROR, PlatformPlayer.class.getPackage().getName() + "." + PlatformPlayer.class.getSimpleName() + ": miniJVM media setup failed: " + e.getMessage());
 					e.printStackTrace();
 				}
-				if(data != null) { stream = new ByteArrayInputStream(data); }
 			}
 
 			if(!miniJvmPlayerCreated)
@@ -751,11 +728,11 @@ public class PlatformPlayer implements Player
 	{
 		private MiniJvmAudioBackend.Handle handle;
 
-		public miniJvmPlayer(byte[] data, boolean midi) throws Exception
+		public miniJvmPlayer(InputStream stream, boolean midi) throws Exception
 		{
 			handle = midi
-				? MobilePlatform.miniJvmAudioBackend.createMidi(data)
-				: MobilePlatform.miniJvmAudioBackend.createPcm(data);
+				? MobilePlatform.miniJvmAudioBackend.createMidi(stream)
+				: MobilePlatform.miniJvmAudioBackend.createPcm(stream);
 		}
 
 		public void realize() { state = Player.REALIZED; }
