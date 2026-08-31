@@ -116,7 +116,10 @@ public final class MiniJvmFrontend
 	{
 		for (int i = 0; i < Config.inputKeycodes.length; i++)
 		{
-			if (Config.inputKeycodes[i] == awtKeyCode) { return Mobile.getMobileKey(i); }
+			if (Config.inputKeycodes[i] == awtKeyCode)
+			{
+				return Mobile.getMobileKey(Mobile.convertAWTKeycode(i));
+			}
 		}
 		return Integer.MIN_VALUE;
 	}
