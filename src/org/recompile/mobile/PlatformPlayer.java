@@ -133,9 +133,10 @@ public class PlatformPlayer implements Player
 			{
 				try
 				{
+					byte[] data;
 					int remaining = stream.available();
 					if(remaining <= 0) { throw new IOException("Media stream length is unavailable"); }
-					byte[] data = new byte[remaining];
+					data = new byte[remaining];
 					int count = stream.read(data, 0, remaining);
 					if(count <= 0) { throw new IOException("Media stream is empty"); }
 					if(count != remaining)
@@ -309,6 +310,39 @@ public class PlatformPlayer implements Player
 		}
 
 		Mobile.log(Mobile.LOG_DEBUG, PlatformPlayer.class.getPackage().getName() + "." + PlatformPlayer.class.getSimpleName() + ": " + "media type: " + contentType);
+	}
+
+	public PlatformPlayer(String mediaPath, String type, boolean miniJvmFile)
+	{
+		listeners = new Vector<PlayerListener>();
+		siemensListeners = new Vector<com.siemens.mp.media.PlayerListener>();
+		kddiListeners = new Vector<com.kddi.media.MediaEventListener>();
+		controls = new Control[NUM_CONTROLS];
+		contentType = type == null ? "" : type;
+		if(Mobile.sound == false)
+		{
+			player = new audioplayer();
+		}
+		else if(MobilePlatform.isMiniJvm && MobilePlatform.miniJvmAudioBackend != null)
+		{
+			try
+			{
+				player = new miniJvmPlayer(mediaPath);
+			}
+			catch(Exception e)
+			{
+				Mobile.log(Mobile.LOG_ERROR, PlatformPlayer.class.getPackage().getName() + "." + PlatformPlayer.class.getSimpleName() + ": miniJVM media setup failed: " + e.getMessage());
+				e.printStackTrace();
+				player = new audioplayer();
+				disableControls = true;
+			}
+		}
+		else
+		{
+			player = new audioplayer();
+			disableControls = true;
+		}
+		controls[0] = new volumeControl(this.player);
 	}
 
 	public PlatformPlayer(String locator)
@@ -721,6 +755,11 @@ public class PlatformPlayer implements Player
 		public miniJvmPlayer(byte[] data) throws Exception
 		{
 			handle = MobilePlatform.miniJvmAudioBackend.create(data);
+		}
+
+		public miniJvmPlayer(String path) throws Exception
+		{
+			handle = MobilePlatform.miniJvmAudioBackend.createFile(path);
 		}
 
 		public void realize() { state = Player.REALIZED; }

@@ -21,6 +21,7 @@ import java.io.InputStream;
 public class JavaxPlatformPlayer extends PlatformPlayer implements javax.microedition.media.Controllable
 {
 	public JavaxPlatformPlayer(InputStream stream, String type) { super(stream, type); }
+	public JavaxPlatformPlayer(String mediaPath, String type, boolean miniJvmFile) { super(mediaPath, type, miniJvmFile); }
 
 	public JavaxPlatformPlayer(String locator) { super(locator); }
 }

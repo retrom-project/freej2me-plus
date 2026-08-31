@@ -42,6 +42,7 @@ import org.recompile.mobile.Mobile;
 import org.recompile.mobile.MobilePlatform;
 import org.recompile.mobile.PlatformPlayer;
 import org.recompile.mobile.JavaxPlatformPlayer;
+import org.recompile.mobile.MIDletLoader;
 import org.recompile.mobile.SiemensPlatformPlayer;
 
 public class Manager
@@ -62,6 +63,8 @@ public class Manager
 	public static Sequencer toneSequencer = null;
 	private static MidiChannel toneChannel;
 	private static Thread toneThread;
+	private static int miniJvmMediaFileId;
+	private static final int MAX_MINIJVM_MEDIA_BYTES = 4 * 1024 * 1024;
 
 	public static synchronized Player createPlayer(InputStream stream, String type) throws IOException, MediaException
 	{
@@ -73,8 +76,33 @@ public class Manager
 		 */
 
 		if(Mobile.dumpAudioStreams) { stream = dumpAudioStream(stream, type); }
+		if(MobilePlatform.isMiniJvm && MobilePlatform.miniJvmAudioBackend != null)
+		{
+			String resourcePath = MIDletLoader.materializeLatestMiniJvmResource();
+			return new JavaxPlatformPlayer(resourcePath != null ? resourcePath : materializeMiniJvmMedia(stream), type, true);
+		}
 
 		return new JavaxPlatformPlayer(stream, type);
+	}
+
+	private static String materializeMiniJvmMedia(InputStream stream) throws IOException
+	{
+		int remaining = stream.available();
+		int capacity = remaining > 0 ? remaining : MAX_MINIJVM_MEDIA_BYTES;
+		byte[] data = new byte[capacity];
+		int count = stream.read(data, 0, capacity);
+		if(count <= 0) { throw new IOException("Media stream is empty"); }
+		String path = "/tmp/j2me-media-" + miniJvmMediaFileId++ + ".media";
+		FileOutputStream output = new FileOutputStream(path);
+		try
+		{
+			output.write(data, 0, count);
+		}
+		finally
+		{
+			output.close();
+		}
+		return path;
 	}
 
 	public static Player createPlayer(String locator) throws MediaException

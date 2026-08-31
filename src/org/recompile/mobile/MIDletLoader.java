@@ -22,6 +22,7 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.URI;
@@ -69,6 +70,8 @@ public class MIDletLoader extends URLClassLoader
 	public static URL baseUrl;
 	private static JarFile jarFile;
 	private static List<JarEntry> jarEntries = new ArrayList<JarEntry>();
+	private static MiniJvmResourceInputStream latestMiniJvmResource;
+	private static int miniJvmMediaFileId;
 
 	public String suitename;
 	public String vendorname;
@@ -674,7 +677,22 @@ public class MIDletLoader extends URLClassLoader
 			url = findResource(resource);
 			// Read all bytes, return ByteArrayInputStream //
 			InputStream stream = url.openStream();
-			if(MobilePlatform.isMiniJvm) { return stream; }
+			if(MobilePlatform.isMiniJvm)
+			{
+				int remaining = stream.available();
+				if(remaining <= 0) { return stream; }
+				byte[] bytes = new byte[remaining];
+				int count = stream.read(bytes, 0, remaining);
+				if(count <= 0) { return stream; }
+				if(count != remaining)
+				{
+					byte[] exact = new byte[count];
+					System.arraycopy(bytes, 0, exact, 0, count);
+					bytes = exact;
+				}
+				latestMiniJvmResource = new MiniJvmResourceInputStream(bytes);
+				return latestMiniJvmResource;
+			}
 
 			ByteArrayOutputStream buffer = new ByteArrayOutputStream();
 			int count=0;
@@ -835,7 +853,26 @@ public class MIDletLoader extends URLClassLoader
 		try
 		{
 			InputStream stream = url.openStream();
-			if(MobilePlatform.isMiniJvm) { return stream; }
+			if(MobilePlatform.isMiniJvm)
+			{
+				int remaining = stream.available();
+				if(remaining <= 0) { return stream; }
+				byte[] bytes = new byte[remaining];
+				int count = stream.read(bytes, 0, remaining);
+				if(count <= 0) { return stream; }
+				if(count != remaining)
+				{
+					byte[] exact = new byte[count];
+					System.arraycopy(bytes, 0, exact, 0, count);
+					bytes = exact;
+				}
+				if(!isSiemens)
+				{
+					latestMiniJvmResource = new MiniJvmResourceInputStream(bytes);
+					return latestMiniJvmResource;
+				}
+				return new SiemensInputStream(bytes);
+			}
 
 			// zb3: why not return a stream? or a bufferedinputstream for marks?
 			
@@ -989,6 +1026,40 @@ public class MIDletLoader extends URLClassLoader
 /* **************************************************************
  * Special Siemens Stuff
  * ************************************************************** */
+	public static String materializeLatestMiniJvmResource() throws IOException
+	{
+		MiniJvmResourceInputStream resource = latestMiniJvmResource;
+		if(resource == null || resource.position() >= resource.source.length) { return null; }
+		String path;
+		synchronized(MIDletLoader.class)
+		{
+			path = "/tmp/j2me-media-" + miniJvmMediaFileId++ + ".media";
+		}
+		FileOutputStream output = new FileOutputStream(path);
+		try
+		{
+			int position = resource.position();
+			output.write(resource.source, position, resource.source.length - position);
+		}
+		finally
+		{
+			output.close();
+		}
+		return path;
+	}
+
+	private static class MiniJvmResourceInputStream extends ByteArrayInputStream
+	{
+		private final byte[] source;
+
+		MiniJvmResourceInputStream(byte[] data)
+		{
+			super(data);
+			source = data;
+		}
+
+		int position() { return pos; }
+	}
 
 	private class SiemensInputStream extends InputStream
 	{

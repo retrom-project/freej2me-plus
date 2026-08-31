@@ -18,6 +18,7 @@ package org.recompile.mobile;
 public interface MiniJvmAudioBackend
 {
 	public Handle create(byte[] data) throws Exception;
+	public Handle createFile(String path) throws Exception;
 	public void playTone(int note, int duration, int volume) throws Exception;
 
 	public interface Handle
