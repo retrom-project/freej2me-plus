@@ -57,6 +57,11 @@
 >
 >### **NOTE: The Libretro jar file needs additional binaries to be compiled before use. Look at the additional steps below if you're going to use it.**
 
+The resulting JAR also contains `org.recompile.freej2me.MiniJvmFrontend`, a
+minimal framebuffer/input frontend for miniJVM-based runtimes. It accepts a JAR
+location and a writable data directory without initializing the desktop AWT
+configuration UI.
+
 # :gear: :video_game: Building the Libretro core
 
 ### Building for Linux:
