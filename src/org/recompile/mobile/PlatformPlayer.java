@@ -160,7 +160,7 @@ public class PlatformPlayer implements Player
 						if(length == buffer.length)
 						{
 							byte[] grown = new byte[buffer.length * 2];
-							System.arraycopy(buffer, 0, grown, 0, length);
+							for(int index = 0; index < length; index++) { grown[index] = buffer[index]; }
 							buffer = grown;
 						}
 						int count = stream.read(buffer, length, buffer.length - length);
@@ -169,7 +169,7 @@ public class PlatformPlayer implements Player
 						length += count;
 					}
 					data = new byte[length];
-					System.arraycopy(buffer, 0, data, 0, length);
+					for(int index = 0; index < length; index++) { data[index] = buffer[index]; }
 					boolean isMidi = containsAsciiIgnoreCase(contentType, "mid") ||
 						(data.length >= 4 && data[0] == 'M' && data[1] == 'T' && data[2] == 'h' && data[3] == 'd');
 					boolean isPcm = containsAsciiIgnoreCase(contentType, "wav") || containsAsciiIgnoreCase(contentType, "basic") ||
