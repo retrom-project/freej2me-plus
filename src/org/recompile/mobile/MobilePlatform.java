@@ -66,6 +66,7 @@ public class MobilePlatform
 	public static long timeToUnfocus = 3000000000L; // Command bar is visible for 3 seconds
 
 	public static boolean isLibretro = false;
+	public static boolean isMiniJvm = false;
 	public static boolean appTerminated = false;
 
 	public MIDletLoader loader;
@@ -847,7 +848,10 @@ public class MobilePlatform
 			 * Load up everything needed to play sound before the jar opens to minimize ingame stutters
 			 * this basically just loads up the synthesizers, as they're the biggest troublemakers.
 			 */
-			javax.microedition.media.Manager.prepareMediaEngine();
+			if(!isMiniJvm)
+			{
+				javax.microedition.media.Manager.prepareMediaEngine();
+			}
 
 			loader.start();
 		}

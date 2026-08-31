@@ -49,6 +49,9 @@ public final class MiniJvmFrontend
 		this.width = width > 0 ? width : 240;
 		this.height = height > 0 ? height : 320;
 
+		MobilePlatform.isMiniJvm = true;
+		Mobile.textEncoding = Mobile.supportedEncodings[Mobile.ISO_8859_1];
+		System.setProperty("file.encoding", Mobile.textEncoding);
 		Mobile.lcdWidth = this.width;
 		Mobile.lcdHeight = this.height;
 		platform = new MobilePlatform(this.width, this.height);
