@@ -112,6 +112,24 @@ public class PlatformPlayer implements Player
 	protected boolean disableControls = false; // For when a given audio format is not supported
 	protected Control[] controls;
 
+	private static boolean containsAsciiIgnoreCase(String value, String needle)
+	{
+		if(value == null || needle == null || needle.length() > value.length()) { return false; }
+		for(int offset = 0; offset <= value.length() - needle.length(); offset++)
+		{
+			boolean matches = true;
+			for(int index = 0; index < needle.length(); index++)
+			{
+				char actual = value.charAt(offset + index);
+				char expected = needle.charAt(index);
+				if(actual >= 'A' && actual <= 'Z') { actual = (char) (actual + ('a' - 'A')); }
+				if(actual != expected) { matches = false; break; }
+			}
+			if(matches) { return true; }
+		}
+		return false;
+	}
+
 	public PlatformPlayer(InputStream stream, String type)
 	{
 		listeners = new Vector<PlayerListener>();
@@ -136,9 +154,9 @@ public class PlatformPlayer implements Player
 				{
 					data = new byte[stream.available()];
 					stream.read(data, 0, data.length);
-					boolean isMidi = contentType.equals("audio/midi") || contentType.equals("audio/x-midi") ||
+					boolean isMidi = containsAsciiIgnoreCase(contentType, "mid") ||
 						(data.length >= 4 && data[0] == 'M' && data[1] == 'T' && data[2] == 'h' && data[3] == 'd');
-					boolean isPcm = contentType.equals("audio/wav") || contentType.equals("audio/x-wav") ||
+					boolean isPcm = containsAsciiIgnoreCase(contentType, "wav") || containsAsciiIgnoreCase(contentType, "basic") ||
 						(data.length >= 12 && data[0] == 'R' && data[1] == 'I' && data[2] == 'F' && data[3] == 'F' && data[8] == 'W' && data[9] == 'A' && data[10] == 'V' && data[11] == 'E');
 					if(isMidi || isPcm)
 					{
