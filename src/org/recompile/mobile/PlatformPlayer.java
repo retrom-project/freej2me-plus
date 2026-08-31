@@ -125,6 +125,10 @@ public class PlatformPlayer implements Player
 		else
 		{
 			boolean miniJvmPlayerCreated = false;
+			if(MobilePlatform.isMiniJvm && MobilePlatform.miniJvmAudioBackend == null)
+			{
+				Mobile.log(Mobile.LOG_ERROR, "miniJVM audio backend is not installed");
+			}
 			if(MobilePlatform.isMiniJvm && MobilePlatform.miniJvmAudioBackend != null)
 			{
 				byte[] data = null;
