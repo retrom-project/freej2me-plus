@@ -17,7 +17,6 @@
 package org.recompile.mobile;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -134,7 +133,18 @@ public class PlatformPlayer implements Player
 			{
 				try
 				{
-					player = new miniJvmPlayer(stream);
+					int remaining = stream.available();
+					if(remaining <= 0) { throw new IOException("Media stream length is unavailable"); }
+					byte[] data = new byte[remaining];
+					int count = stream.read(data, 0, remaining);
+					if(count <= 0) { throw new IOException("Media stream is empty"); }
+					if(count != remaining)
+					{
+						byte[] exact = new byte[count];
+						System.arraycopy(data, 0, exact, 0, count);
+						data = exact;
+					}
+					player = new miniJvmPlayer(data);
 				}
 				catch(Exception e)
 				{
@@ -708,34 +718,8 @@ public class PlatformPlayer implements Player
 	{
 		private MiniJvmAudioBackend.Handle handle;
 
-		public miniJvmPlayer(InputStream stream) throws Exception
+		public miniJvmPlayer(byte[] data) throws Exception
 		{
-			int remaining = stream.available();
-			byte[] data;
-			if(remaining > 0)
-			{
-				data = new byte[remaining];
-				int count = stream.read(data, 0, remaining);
-				if(count <= 0) { throw new IOException("Media stream is empty"); }
-				if(count != remaining)
-				{
-					byte[] exact = new byte[count];
-					System.arraycopy(data, 0, exact, 0, count);
-					data = exact;
-				}
-			}
-			else
-			{
-				ByteArrayOutputStream output = new ByteArrayOutputStream();
-				byte[] buffer = new byte[4096];
-				int count;
-				while((count = stream.read(buffer, 0, buffer.length)) >= 0)
-				{
-					if(count > 0) { output.write(buffer, 0, count); }
-				}
-				data = output.toByteArray();
-				if(data.length == 0) { throw new IOException("Media stream is empty"); }
-			}
 			handle = MobilePlatform.miniJvmAudioBackend.create(data);
 		}
 
