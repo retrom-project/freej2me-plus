@@ -128,7 +128,9 @@ public class PlatformPlayer implements Player
 			boolean miniJvmPlayerCreated = false;
 			if(MobilePlatform.isMiniJvm && MobilePlatform.miniJvmAudioBackend != null)
 			{
-				String miniType = contentType.toLowerCase();
+				// MIME content types are ASCII and Manager supplies lower-case values.
+				// Avoid locale-dependent String case conversion on compact VMs.
+				String miniType = contentType;
 				boolean declaredMidi = miniType.indexOf("mid") >= 0 || miniType.indexOf("tone") >= 0;
 				boolean declaredPcm = miniType.indexOf("wav") >= 0 || miniType.indexOf("basic") >= 0;
 				if(declaredMidi || declaredPcm || miniType.length() == 0 || miniType.indexOf("octet-stream") >= 0)
