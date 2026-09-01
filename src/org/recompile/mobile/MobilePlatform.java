@@ -220,6 +220,7 @@ public class MobilePlatform
 					@Override
 					public void run()
 					{
+						System.out.println("[j2me-web-input] " + keycode);
 						if(!handleCommands(Mobile.getCanvasAction(keycode)))
 						{
 							if(displayable instanceof Canvas && !((Canvas) displayable).areKeysSuppressed()) { displayable.keyPressed(keycode); }
