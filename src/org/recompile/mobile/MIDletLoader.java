@@ -1023,6 +1023,43 @@ public class MIDletLoader extends URLClassLoader
 		return materializeMiniJvmBytes(resource.source, position, end);
 	}
 
+	/** Returns the exact compact-VM media bytes without a temporary-file EOF probe. */
+	public static byte[] resolveMiniJvmMedia(InputStream stream) throws IOException
+	{
+		if(stream instanceof MiniJvmResourceInputStream)
+		{
+			MiniJvmResourceInputStream resource = (MiniJvmResourceInputStream) stream;
+			int position = resource.position();
+			int end = position == 0 ? resource.source.length : standardMidiEnd(resource.source, position);
+			if(end > position) { return copyMiniJvmBytes(resource.source, position, end); }
+		}
+
+		MiniJvmResourceInputStream resource = latestMiniJvmResource;
+		if(resource == null) { return null; }
+		int position = -1;
+		int end = -1;
+		for(int index = 0; index <= resource.source.length - 14; index++)
+		{
+			int candidateEnd = standardMidiEnd(resource.source, index);
+			if(candidateEnd > index)
+			{
+				position = index;
+				end = candidateEnd;
+				index = candidateEnd - 1;
+			}
+		}
+		if(position < 0) { return null; }
+		System.out.println("[audio] recovered MIDI from latest resource: " + position + " -> " + end);
+		return copyMiniJvmBytes(resource.source, position, end);
+	}
+
+	private static byte[] copyMiniJvmBytes(byte[] source, int position, int end)
+	{
+		byte[] bytes = new byte[end - position];
+		System.arraycopy(source, position, bytes, 0, bytes.length);
+		return bytes;
+	}
+
 	public static String materializeLatestMiniJvmMidi() throws IOException
 	{
 		MiniJvmResourceInputStream resource = latestMiniJvmResource;
