@@ -43,6 +43,7 @@ import org.recompile.mobile.MobilePlatform;
 import org.recompile.mobile.PlatformPlayer;
 import org.recompile.mobile.JavaxPlatformPlayer;
 import org.recompile.mobile.MIDletLoader;
+import org.recompile.mobile.MiniJvmMediaResolver;
 import org.recompile.mobile.SiemensPlatformPlayer;
 
 public class Manager
@@ -78,31 +79,20 @@ public class Manager
 		if(Mobile.dumpAudioStreams) { stream = dumpAudioStream(stream, type); }
 		if(MobilePlatform.isMiniJvm && MobilePlatform.miniJvmAudioBackend != null)
 		{
-			String resourcePath = MIDletLoader.materializeLatestMiniJvmResource();
-			return new JavaxPlatformPlayer(resourcePath != null ? resourcePath : materializeMiniJvmMedia(stream), type, true);
+			String resourcePath = MIDletLoader.materializeMiniJvmResource(stream);
+			if(resourcePath == null) { resourcePath = MIDletLoader.materializeLatestMiniJvmMidi(); }
+			if(resourcePath == null)
+			{
+				byte[] data = MiniJvmMediaResolver.readMediaBounded(stream, MAX_MINIJVM_MEDIA_BYTES);
+				resourcePath = "/tmp/j2me-media-" + miniJvmMediaFileId++ + ".media";
+				FileOutputStream output = new FileOutputStream(resourcePath);
+				try { output.write(data, 0, data.length); }
+				finally { output.close(); }
+			}
+			return new JavaxPlatformPlayer(resourcePath, type, true);
 		}
 
 		return new JavaxPlatformPlayer(stream, type);
-	}
-
-	private static String materializeMiniJvmMedia(InputStream stream) throws IOException
-	{
-		int remaining = stream.available();
-		int capacity = remaining > 0 ? remaining : MAX_MINIJVM_MEDIA_BYTES;
-		byte[] data = new byte[capacity];
-		int count = stream.read(data, 0, capacity);
-		if(count <= 0) { throw new IOException("Media stream is empty"); }
-		String path = "/tmp/j2me-media-" + miniJvmMediaFileId++ + ".media";
-		FileOutputStream output = new FileOutputStream(path);
-		try
-		{
-			output.write(data, 0, count);
-		}
-		finally
-		{
-			output.close();
-		}
-		return path;
 	}
 
 	public static Player createPlayer(String locator) throws MediaException

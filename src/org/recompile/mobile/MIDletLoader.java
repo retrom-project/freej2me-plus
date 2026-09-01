@@ -679,17 +679,8 @@ public class MIDletLoader extends URLClassLoader
 			InputStream stream = url.openStream();
 			if(MobilePlatform.isMiniJvm)
 			{
-				int remaining = stream.available();
-				if(remaining <= 0) { return stream; }
-				byte[] bytes = new byte[remaining];
-				int count = stream.read(bytes, 0, remaining);
-				if(count <= 0) { return stream; }
-				if(count != remaining)
-				{
-					byte[] exact = new byte[count];
-					System.arraycopy(bytes, 0, exact, 0, count);
-					bytes = exact;
-				}
+				byte[] bytes = readMiniJvmResource(stream);
+				if(bytes.length == 0) { return stream; }
 				latestMiniJvmResource = new MiniJvmResourceInputStream(bytes);
 				return latestMiniJvmResource;
 			}
@@ -855,17 +846,8 @@ public class MIDletLoader extends URLClassLoader
 			InputStream stream = url.openStream();
 			if(MobilePlatform.isMiniJvm)
 			{
-				int remaining = stream.available();
-				if(remaining <= 0) { return stream; }
-				byte[] bytes = new byte[remaining];
-				int count = stream.read(bytes, 0, remaining);
-				if(count <= 0) { return stream; }
-				if(count != remaining)
-				{
-					byte[] exact = new byte[count];
-					System.arraycopy(bytes, 0, exact, 0, count);
-					bytes = exact;
-				}
+				byte[] bytes = readMiniJvmResource(stream);
+				if(bytes.length == 0) { return stream; }
 				if(!isSiemens)
 				{
 					latestMiniJvmResource = new MiniJvmResourceInputStream(bytes);
@@ -892,6 +874,24 @@ public class MIDletLoader extends URLClassLoader
 		{
 			return super.getResourceAsStream(resource);
 		}
+	}
+
+	private static byte[] readMiniJvmResource(InputStream stream) throws IOException
+	{
+		ByteArrayOutputStream output = new ByteArrayOutputStream();
+		byte[] buffer = new byte[4096];
+		int count;
+		while((count = stream.read(buffer, 0, buffer.length)) >= 0)
+		{
+			if(count == 0)
+			{
+				int value = stream.read();
+				if(value < 0) { break; }
+				output.write(value);
+			}
+			else { output.write(buffer, 0, count); }
+		}
+		return output.toByteArray();
 	}
 
 	public byte[] getMIDletResourceAsByteArray(String resource)
@@ -1026,10 +1026,39 @@ public class MIDletLoader extends URLClassLoader
 /* **************************************************************
  * Special Siemens Stuff
  * ************************************************************** */
-	public static String materializeLatestMiniJvmResource() throws IOException
+	public static String materializeMiniJvmResource(InputStream stream) throws IOException
+	{
+		if(!(stream instanceof MiniJvmResourceInputStream)) { return null; }
+		MiniJvmResourceInputStream resource = (MiniJvmResourceInputStream) stream;
+		int position = resource.position();
+		int end = position == 0 ? resource.source.length : standardMidiEnd(resource.source, position);
+		if(end <= position) { return null; }
+		return materializeMiniJvmBytes(resource.source, position, end);
+	}
+
+	public static String materializeLatestMiniJvmMidi() throws IOException
 	{
 		MiniJvmResourceInputStream resource = latestMiniJvmResource;
-		if(resource == null || resource.position() >= resource.source.length) { return null; }
+		if(resource == null) { return null; }
+		int position = -1;
+		int end = -1;
+		for(int index = 0; index <= resource.source.length - 14; index++)
+		{
+			int candidateEnd = standardMidiEnd(resource.source, index);
+			if(candidateEnd > index)
+			{
+				position = index;
+				end = candidateEnd;
+				index = candidateEnd - 1;
+			}
+		}
+		if(position < 0) { return null; }
+		System.out.println("[audio] recovered MIDI from latest resource: " + position + " -> " + end);
+		return materializeMiniJvmBytes(resource.source, position, end);
+	}
+
+	private static String materializeMiniJvmBytes(byte[] source, int position, int end) throws IOException
+	{
 		String path;
 		synchronized(MIDletLoader.class)
 		{
@@ -1038,14 +1067,40 @@ public class MIDletLoader extends URLClassLoader
 		FileOutputStream output = new FileOutputStream(path);
 		try
 		{
-			int position = resource.position();
-			output.write(resource.source, position, resource.source.length - position);
+			output.write(source, position, end - position);
 		}
 		finally
 		{
 			output.close();
 		}
 		return path;
+	}
+
+	private static int standardMidiEnd(byte[] source, int position)
+	{
+		if(position < 0 || position > source.length - 14 || source[position] != 'M' ||
+			source[position + 1] != 'T' || source[position + 2] != 'h' || source[position + 3] != 'd') return -1;
+		long headerLength = unsignedInt(source, position + 4);
+		if(headerLength < 6 || headerLength > source.length - position - 8) return -1;
+		int tracks = (source[position + 10] & 0xff) << 8 | source[position + 11] & 0xff;
+		int cursor = position + 8 + (int) headerLength;
+		for(int track = 0; track < tracks; track++)
+		{
+			if(cursor > source.length - 8 || source[cursor] != 'M' || source[cursor + 1] != 'T' ||
+				source[cursor + 2] != 'r' || source[cursor + 3] != 'k') return -1;
+			long length = unsignedInt(source, cursor + 4);
+			if(length > source.length - cursor - 8) return -1;
+			cursor += 8 + (int) length;
+		}
+		return tracks > 0 ? cursor : -1;
+	}
+
+	private static long unsignedInt(byte[] source, int offset)
+	{
+		return (long) (source[offset] & 0xff) << 24 |
+			(long) (source[offset + 1] & 0xff) << 16 |
+			(long) (source[offset + 2] & 0xff) << 8 |
+			(long) (source[offset + 3] & 0xff);
 	}
 
 	private static class MiniJvmResourceInputStream extends ByteArrayInputStream
