@@ -7,7 +7,7 @@ public final class MiniJvmPlatformPlayerTest {
     public static void main(String[] args) throws Exception {
         FakeBackend backend = new FakeBackend();
         MobilePlatform.miniJvmAudioBackend = backend;
-        MiniJvmPlatformPlayer player = new MiniJvmPlatformPlayer(new byte[] { 1, 2, 3 }, "audio/midi");
+        Player player = new MiniJvmPlatformPlayer(new byte[] { 1, 2, 3 }, "audio/midi");
 
         player.setLoopCount(-1);
         player.start();
