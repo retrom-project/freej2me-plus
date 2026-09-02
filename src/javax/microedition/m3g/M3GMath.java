@@ -149,6 +149,24 @@ public class M3GMath
 
 	// Now we get to stuff specific to M3G
 
+	/**
+	 * Multiplies one four-component vector by a row-major 4x4 matrix.
+	 * This allocation-free helper is also the stable entry point used by
+	 * hardware rendering backends that live outside the core JAR.
+	 */
+	public static final void transform(float[] matrix, float[] input, int inputOffset,
+		float[] output, int outputOffset)
+	{
+		float x = input[inputOffset];
+		float y = input[inputOffset + 1];
+		float z = input[inputOffset + 2];
+		float w = input[inputOffset + 3];
+		output[outputOffset] = matrix[0] * x + matrix[1] * y + matrix[2] * z + matrix[3] * w;
+		output[outputOffset + 1] = matrix[4] * x + matrix[5] * y + matrix[6] * z + matrix[7] * w;
+		output[outputOffset + 2] = matrix[8] * x + matrix[9] * y + matrix[10] * z + matrix[11] * w;
+		output[outputOffset + 3] = matrix[12] * x + matrix[13] * y + matrix[14] * z + matrix[15] * w;
+	}
+
 	// Normalize a vector
 	public static final void normalize(float[] vector)
 	{

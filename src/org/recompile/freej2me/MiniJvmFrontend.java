@@ -144,6 +144,7 @@ public final class MiniJvmFrontend
 			gameSettings.put("rotate", Integer.toString(rotation));
 			gameSettings.put("spdhackm3ghalfres", halfResolution ? "on" : "off");
 			gameSettings.put("j2mewebm3gbackend", graphicsBackend);
+			System.setProperty("freej2me.m3g.backend", graphicsBackend);
 			systemSettings.put("sound", sound ? "on" : "off");
 		}
 

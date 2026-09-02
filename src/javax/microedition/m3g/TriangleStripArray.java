@@ -64,6 +64,15 @@ public class TriangleStripArray extends IndexBuffer
 
 	protected Object3D duplicateImpl() { return (TriangleStripArray) super.duplicateImpl(); }
 
+	public int[] getRawIndices() { return (int[]) indices.clone(); }
+
+	public int[] getStripLengths()
+	{
+		int[] lengths = new int[indexCount / 3];
+		java.util.Arrays.fill(lengths, 3);
+		return lengths;
+	}
+
 	private void updateFields(boolean isExplicit, int[] indices, int[] stripLengths)
 	{
 		/* Update the number of indices from the parent by mapping all valid StripLength elements. */

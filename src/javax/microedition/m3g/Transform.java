@@ -74,6 +74,12 @@ public class Transform
 		System.arraycopy(this.matrix, 0, matrix, 0, 16);
 	}
 
+	/** Internal backend view. Callers must not mutate the returned copy. */
+	public float[] getMatrix()
+	{
+		return (float[]) this.matrix.clone();
+	}
+
 	public void invert()
 	{
 		/* The inverse matrix is calculated by using an adapted version of the Laplace Expansion Theorem. */

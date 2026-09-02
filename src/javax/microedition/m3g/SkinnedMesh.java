@@ -20,6 +20,34 @@ import java.util.ArrayList;
 
 public class SkinnedMesh extends Mesh
 {
+	static final class GpuSkinningData
+	{
+		final VertexBuffer baseVertices;
+		final int vertexCount;
+		final int boneCount;
+		final int maxVertexInfluenceCount;
+		final int packedInfluenceCount;
+		final float[] boneIndices;
+		final float[] boneWeights;
+		final float[] boneMatrices;
+
+		GpuSkinningData(VertexBuffer baseVertices, int vertexCount, int boneCount,
+			int maxVertexInfluenceCount, int packedInfluenceCount, float[] boneIndices,
+			float[] boneWeights, float[] boneMatrices)
+		{
+			this.baseVertices = baseVertices;
+			this.vertexCount = vertexCount;
+			this.boneCount = boneCount;
+			this.maxVertexInfluenceCount = maxVertexInfluenceCount;
+			this.packedInfluenceCount = packedInfluenceCount;
+			this.boneIndices = boneIndices;
+			this.boneWeights = boneWeights;
+			this.boneMatrices = boneMatrices;
+		}
+	}
+
+	GpuSkinningData getGpuSkinningData(int maxInfluences) { return null; }
+	String getGpuSkinningUnavailableReason(int maxInfluences) { return "cpuSkinningRequired"; }
 	public Group skeleton;
 
 	private VertexBuffer skinnedVertices;

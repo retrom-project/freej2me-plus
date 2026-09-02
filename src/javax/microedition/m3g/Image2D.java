@@ -235,6 +235,9 @@ public class Image2D extends Object3D
 
 	public int getWidth() { return this.width; }
 
+	/** Internal backend view. Hardware renderers must treat it as read-only. */
+	public byte[] getImageData() { return this.image; }
+
 	public boolean isMutable() { return this.mutable; }
 
 	public void set(int x, int y, int w, int h, byte[] image)

@@ -42,6 +42,7 @@ public class VertexBuffer extends Object3D
 	private float[] positionBias;
 	private float[] texCoordScale;
 	private float[][] texCoordBias;
+	private int revision;
 	// colorScale =   1/255
 	// colorBias  = 128/255
 
@@ -142,6 +143,36 @@ public class VertexBuffer extends Object3D
 
 	public int getVertexCount() { return this.length; }
 
+	public float[] getPositionScaleBias()
+	{
+		return new float[] { positionScale, positionBias[0], positionBias[1], positionBias[2] };
+	}
+
+	public float[] getTexCoordScaleBias(int index)
+	{
+		if (index < 0 || index >= texCoords.length) { throw new IndexOutOfBoundsException(); }
+		float[] result = new float[4];
+		result[0] = texCoordScale[index];
+		if (texCoordBias[index] != null)
+		{
+			System.arraycopy(texCoordBias[index], 0, result, 1, Math.min(3, texCoordBias[index].length));
+		}
+		return result;
+	}
+
+	public int getRevision()
+	{
+		int value = revision;
+		if (positions != null) { value = value * 31 + positions.getRevision(); }
+		if (normals != null) { value = value * 31 + normals.getRevision(); }
+		if (colors != null) { value = value * 31 + colors.getRevision(); }
+		for (int i = 0; i < texCoords.length; i++)
+		{
+			if (texCoords[i] != null) { value = value * 31 + texCoords[i].getRevision(); }
+		}
+		return value;
+	}
+
 	public void setColors(VertexArray colors)
 	{
 		if (colors != null)
@@ -166,9 +197,10 @@ public class VertexBuffer extends Object3D
 			this.colors = colors;
 			this.checkUnfix();
 		}
+		revision++;
 	}
 
-	public void setDefaultColor(int ARGB) { this.defaultColor = ARGB; }
+	public void setDefaultColor(int ARGB) { this.defaultColor = ARGB; revision++; }
 
 	public void setNormals(VertexArray normals)
 	{
@@ -193,6 +225,7 @@ public class VertexBuffer extends Object3D
 			this.normals = normals;
 			this.checkUnfix();
 		}
+		revision++;
 	}
 
 	public void setPositions(VertexArray positions, float scale, float[] bias)
@@ -227,6 +260,7 @@ public class VertexBuffer extends Object3D
 			this.positionBias[2] = 0.0f;
 			this.checkUnfix();
 		}
+		revision++;
 	}
 
 	public void setTexCoords(int index, VertexArray texCoords, float scale, float[] bias)
@@ -267,6 +301,7 @@ public class VertexBuffer extends Object3D
 			this.texCoordBias[index] = null;
 			this.checkUnfix();
 		}
+		revision++;
 	}
 
 	private void updateLength(int length)

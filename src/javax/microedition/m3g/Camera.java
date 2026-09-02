@@ -90,6 +90,14 @@ public class Camera extends Node
 		return this.projMode;
 	}
 
+	/** Internal backend helper; viewport dimensions are already reflected by the camera aspect ratio. */
+	public Transform getProjectionTransform(int viewportWidth, int viewportHeight)
+	{
+		Transform transform = new Transform();
+		getProjection(transform);
+		return transform;
+	}
+
 	public void setGeneric(Transform transform)
 	{
 		/* As per JSR-184, throw NullPointerException if the received transform is null. */

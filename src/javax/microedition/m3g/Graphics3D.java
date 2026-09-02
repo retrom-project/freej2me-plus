@@ -194,6 +194,9 @@ public class Graphics3D
 
 	final Transform projectionMatrix = new Transform();
 	final int[] renderableTriangles = {0}; // Counter for visible triangles
+	private final Backend softwareBackend;
+	private final Backend backend;
+	private boolean softwareDispatch;
 
 
 	public Graphics3D()
@@ -215,6 +218,8 @@ public class Graphics3D
 		normalMatrix = new Transform();
 		texcomptr = new Transform();
 		for(int i = 0; i < NUM_TEXTURE_UNITS; i++) { textr[i] = new Transform(); }
+		softwareBackend = new SoftwareRenderBackend(this);
+		backend = createBackend();
 	}
 
 
@@ -330,10 +335,16 @@ public class Graphics3D
 		Arrays.fill(this.depthBuffer, (short) M3GMath.round(this.far * 32767.0f));
 		this.depthEnabled = depthBuffer;
 		this.hints = hints;
+		backend.bindTarget(target, depthBuffer, hints);
 	}
 
 	public void clear(Background background)
 	{
+		if (!softwareDispatch)
+		{
+			backend.clear(background);
+			return;
+		}
 		/*
 		 * As per JSR-184, this should throw IllegalStateException if this Graphics3D object does not
 		 * have a render target. However, some games and demos were written against lenient phone
@@ -487,6 +498,7 @@ public class Graphics3D
 		/* Ignore the call if no render target is bound. */
 		if(this.target != null)
 		{
+			backend.releaseTarget();
 			/* If there is a render target, release it */
 			this.target = null;
 		}
@@ -552,7 +564,15 @@ public class Graphics3D
 			VertexBuffer vertices = mesh.getVertexBuffer();
 			for (int i = 0; i < subMeshes; i++)
 			{
-				if (mesh.getAppearance(i) != null) { render(vertices, mesh.getIndexBuffer(i), mesh.getAppearance(i), transform, node.getScope()); }
+				Appearance appearance = mesh.getAppearance(i);
+				IndexBuffer indices = mesh.getIndexBuffer(i);
+				if (appearance == null) { continue; }
+				if (mesh instanceof SkinnedMesh && backend instanceof SkinningBackend && indices instanceof TriangleStripArray &&
+					((SkinningBackend) backend).renderSkinned((SkinnedMesh) mesh, (TriangleStripArray) indices, appearance, transform))
+				{
+					continue;
+				}
+				renderMesh(mesh, i, vertices, indices, appearance, transform, node.getScope());
 			}
 
 			/*
@@ -595,6 +615,18 @@ public class Graphics3D
 	public void render(VertexBuffer vertices, IndexBuffer triangles, Appearance appearance, Transform transform)
 	{ this.render(vertices, triangles, appearance, transform, -1); }
 
+	private void renderMesh(Mesh mesh, int submeshIndex, VertexBuffer vertices, IndexBuffer triangles,
+		Appearance appearance, Transform transform, int scope)
+	{
+		if (!softwareDispatch && triangles instanceof TriangleStripArray)
+		{
+			if ((scope & this.currCam.getScope()) == 0) { return; }
+			backend.render(mesh, submeshIndex, vertices, (TriangleStripArray) triangles, appearance, transform);
+			return;
+		}
+		render(vertices, triangles, appearance, transform, scope);
+	}
+
 	public void render(VertexBuffer vertices, IndexBuffer triangles, Appearance appearance, Transform transform, int scope)
 	{
 		/* As per JSR-184, if vertices, triangles or appearence are null, throw a NullPointerException. */
@@ -617,6 +649,11 @@ public class Graphics3D
 		 * objects parked inside a Group), so ignoring this draws them all at the origin.
 		 */
 		if ((scope & this.currCam.getScope()) == 0) { return; }
+		if (!softwareDispatch && triangles instanceof TriangleStripArray)
+		{
+			backend.render(null, -1, vertices, (TriangleStripArray) triangles, appearance, transform);
+			return;
+		}
 
 		final int projType = this.currCam.getProjection((float []) null);
 
@@ -2274,5 +2311,69 @@ public class Graphics3D
 		}
 
 		return (texY << 16) | (texX & 0xFFFF);
+	}
+
+	private Backend createBackend()
+	{
+		String mode = System.getProperty("freej2me.m3g.backend", "auto");
+		if ("software".equals(mode)) { return softwareBackend; }
+		String factoryName = System.getProperty("freej2me.m3g.backendFactory");
+		if (factoryName == null || factoryName.length() == 0)
+		{
+			factoryName = "javax.microedition.m3g.MiniJvmGraphics3DFactory";
+		}
+		try
+		{
+			BackendFactory factory = (BackendFactory) Class.forName(factoryName).newInstance();
+			Backend created = factory.create(this, softwareBackend);
+			return created != null ? created : softwareBackend;
+		}
+		catch (Throwable ignored) { return softwareBackend; }
+	}
+
+	private static final class SoftwareRenderBackend implements Backend
+	{
+		private final Graphics3D owner;
+
+		SoftwareRenderBackend(Graphics3D owner) { this.owner = owner; }
+
+		public void bindTarget(Object target, boolean depthBuffer, int hints) { }
+
+		public void clear(Background background)
+		{
+			owner.softwareDispatch = true;
+			try { owner.clear(background); }
+			finally { owner.softwareDispatch = false; }
+		}
+
+		public void render(Mesh mesh, int submeshIndex, VertexBuffer vertices,
+			TriangleStripArray triangles, Appearance appearance, Transform transform)
+		{
+			owner.softwareDispatch = true;
+			try { owner.render(vertices, triangles, appearance, transform); }
+			finally { owner.softwareDispatch = false; }
+		}
+
+		public void releaseTarget() { }
+	}
+
+	public static interface SkinningBackend extends Backend
+	{
+		boolean renderSkinned(SkinnedMesh mesh, TriangleStripArray triangles,
+			Appearance appearance, Transform transform);
+	}
+
+	public static interface Backend
+	{
+		void bindTarget(Object target, boolean depthBuffer, int hints);
+		void clear(Background background);
+		void render(Mesh mesh, int submeshIndex, VertexBuffer vertices,
+			TriangleStripArray triangles, Appearance appearance, Transform transform);
+		void releaseTarget();
+	}
+
+	public static interface BackendFactory
+	{
+		Backend create(Graphics3D owner, Backend softwareFallback);
 	}
 }
