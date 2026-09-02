@@ -210,7 +210,10 @@ public class MobilePlatform
 		if(!MIDletLoader.MIDletSelected) { MIDletLoader.keyPress(Mobile.getGameAction(keycode)); }
 		else if (!Mobile.isPaused)
 		{
-			updateKeyState(Mobile.getGameAction(keycode), true);
+			int gameAction = Mobile.getGameAction(keycode);
+			updateKeyState(gameAction, true);
+			System.out.println("[j2me-web-key-state] key=" + keycode + " action=" + gameAction +
+					" state=" + keyState + " pressed=1");
 			updateVodafoneKeyState(Mobile.getCanvasAction(keycode), true);
 			updateDoJaKeyState(Mobile.getCanvasAction(keycode), true);
 			if (!Mobile.isDoJa && Mobile.getDisplay() != null && (displayable = Mobile.getDisplay().getCurrent()) != null)
@@ -237,7 +240,10 @@ public class MobilePlatform
 
 		if(!Mobile.isPaused && MIDletLoader.MIDletSelected)
 		{
-			updateKeyState(Mobile.getGameAction(keycode), false);
+			int gameAction = Mobile.getGameAction(keycode);
+			updateKeyState(gameAction, false);
+			System.out.println("[j2me-web-key-state] key=" + keycode + " action=" + gameAction +
+					" state=" + keyState + " pressed=0");
 			updateVodafoneKeyState(Mobile.getCanvasAction(keycode), false);
 			updateDoJaKeyState(Mobile.getCanvasAction(keycode), false);
 			if (!Mobile.isDoJa && Mobile.getDisplay() != null && (displayable = Mobile.getDisplay().getCurrent()) != null && MIDletLoader.MIDletSelected)
@@ -351,7 +357,7 @@ public class MobilePlatform
 			case Canvas.FIRE:     mask = GameCanvas.FIRE_PRESSED;   break;
 		}
 		if(pressed) { keyState |= mask; }
-		else { keyState ^= mask; }
+		else { keyState &= ~mask; }
 	}
 
 	// Original implementation by Yury Kharchenko (J2ME-Loader)
