@@ -69,6 +69,11 @@ public class MobilePlatform
 	public static boolean isMiniJvm = false;
 	public static MiniJvmAudioBackend miniJvmAudioBackend = null;
 	public static boolean appTerminated = false;
+	/** True after the active MIDlet has submitted its first LCD frame. */
+	public static volatile boolean firstFramePresented = false;
+	/** True after the MIDP event thread has processed a post-start no-op. */
+	public static volatile boolean inputQueueReady = false;
+	private static volatile boolean inputQueueProbeScheduled = false;
 
 	public MIDletLoader loader;
 	public static Displayable displayable;
@@ -88,6 +93,7 @@ public class MobilePlatform
 
 	public MobilePlatform(int width, int height)
 	{
+		resetReadinessSignals();
 		boolean isUsingValidEncoding = false;
 
 		// Check whether we're using any of the valid encodings before starting the jar, otherwise we'll be defaulting to ISO_8859_1
@@ -358,6 +364,13 @@ public class MobilePlatform
 		}
 		if(pressed) { keyState |= mask; }
 		else { keyState &= ~mask; }
+	}
+
+	public static void resetReadinessSignals()
+	{
+		firstFramePresented = false;
+		inputQueueReady = false;
+		inputQueueProbeScheduled = false;
 	}
 
 	// Original implementation by Yury Kharchenko (J2ME-Loader)
@@ -898,6 +911,16 @@ public class MobilePlatform
 			}
 			if(postDraw != null) { postDraw.run(); postDraw = null; }
 			painter.run();
+			firstFramePresented = true;
+			if (!inputQueueProbeScheduled && Mobile.getDisplay() != null)
+			{
+				inputQueueProbeScheduled = true;
+				Mobile.getDisplay().postInputEvent(new Runnable()
+				{
+					@Override
+					public void run() { inputQueueReady = true; }
+				});
+			}
 
 			if(focusCommandBar)
 			{

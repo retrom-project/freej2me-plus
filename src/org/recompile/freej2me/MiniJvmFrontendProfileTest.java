@@ -16,6 +16,7 @@ public final class MiniJvmFrontendProfileTest
 		source.put("sound", "off");
 		source.put("m3g.backend", "webgl2");
 		source.put("m3g.halfResolution", "on");
+		source.put("midlet.launch", "thread");
 
 		MiniJvmFrontend.Profile profile = MiniJvmFrontend.Profile.from(source, 240, 320, 60);
 		Map<String, String> game = new HashMap<String, String>();
@@ -30,12 +31,16 @@ public final class MiniJvmFrontendProfileTest
 		check("off".equals(system.get("sound")), "sound");
 		check("webgl2".equals(game.get("j2mewebm3gbackend")), "M3G backend");
 		check("on".equals(game.get("spdhackm3ghalfres")), "M3G half resolution");
+		check(profile.threadedMidletStart, "threaded MIDlet launch");
 
 		source.put("width", "0");
 		source.put("phone", "invalid");
 		profile = MiniJvmFrontend.Profile.from(source, 240, 320, 60);
 		check(profile.width == 240, "invalid width fallback");
 		check("Standard".equals(profile.phone), "invalid phone fallback");
+		source.put("midlet.launch", "invalid");
+		profile = MiniJvmFrontend.Profile.from(source, 240, 320, 60);
+		check(!profile.threadedMidletStart, "invalid MIDlet launch fallback");
 	}
 
 	private static void check(boolean value, String label)

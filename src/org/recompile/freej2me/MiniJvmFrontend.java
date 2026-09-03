@@ -91,7 +91,25 @@ public final class MiniJvmFrontend
 
 		profile.applyTo(Mobile.config.settings, Mobile.config.sysSettings);
 		applySettings();
-		platform.runJar();
+		// platform.load() paints its own progress screen; READY must wait for
+		// the first frame submitted by the MIDlet itself.
+		MobilePlatform.resetReadinessSignals();
+		if (profile.threadedMidletStart)
+		{
+			/*
+			 * Some MIDP 1.0 titles never return from startApp() and run their game
+			 * loop directly on the AMS caller.  Isolate only those known titles;
+			 * keeping the default synchronous path avoids changing startup and input
+			 * timing for well-behaved MIDlets.
+			 */
+			Thread midletLauncher = new Thread(new Runnable()
+			{
+				@Override
+				public void run() { platform.runJar(); }
+			}, "MIDlet-Launcher");
+			midletLauncher.start();
+		}
+		else { platform.runJar(); }
 	}
 
 	/** Validated browser settings kept separate from the desktop config UI. */
@@ -105,9 +123,11 @@ public final class MiniJvmFrontend
 		public final boolean sound;
 		public final String graphicsBackend;
 		public final boolean halfResolution;
+		public final boolean threadedMidletStart;
 
 		private Profile(int width, int height, int frameRate, String phone, int rotation,
-				boolean sound, String graphicsBackend, boolean halfResolution)
+				boolean sound, String graphicsBackend, boolean halfResolution,
+				boolean threadedMidletStart)
 		{
 			this.width = width;
 			this.height = height;
@@ -117,6 +137,7 @@ public final class MiniJvmFrontend
 			this.sound = sound;
 			this.graphicsBackend = graphicsBackend;
 			this.halfResolution = halfResolution;
+			this.threadedMidletStart = threadedMidletStart;
 		}
 
 		public static Profile from(Map<String, String> source, int width, int height, int frameRate)
@@ -131,8 +152,9 @@ public final class MiniJvmFrontend
 			boolean sound = !"off".equals(values.get("sound"));
 			String backend = allowed(values.get("m3g.backend"), BACKEND_VALUES, "auto");
 			boolean halfResolution = "on".equals(values.get("m3g.halfResolution"));
+			boolean threadedMidletStart = "thread".equals(values.get("midlet.launch"));
 			return new Profile(resolvedWidth, resolvedHeight, resolvedFps, phone, rotation,
-					sound, backend, halfResolution);
+					sound, backend, halfResolution, threadedMidletStart);
 		}
 
 		public void applyTo(Map<String, String> gameSettings, Map<String, String> systemSettings)
