@@ -118,6 +118,7 @@ public abstract class PlatformGraphics implements DirectGraphics,
 
 	// com.nttdocomo.opt.ui.Graphics2 variables
 	protected int renderMode = com.nttdocomo.opt.ui.Graphics2.OP_REPL;
+	public static PixelBlitter pixelBlitter;
 	protected int srcRatio = 255, dstRatio = 255;
 
 	// FPS Counter variables
@@ -556,6 +557,14 @@ public abstract class PlatformGraphics implements DirectGraphics,
 
 		final int icache = (x > clipX) ? 0 : (clipX - x);
 		final int jcache = (y > clipY) ? 0 : (clipY - y);
+
+		// Frontends may accelerate a complete clipped rectangle. Other render modes
+		// and unsupported/aliased buffers retain the portable implementation below.
+		if (pixelBlitter != null && (!processAlpha || renderMode == com.nttdocomo.opt.ui.Graphics2.OP_REPL) &&
+			width > icache && height > jcache && pixelBlitter.draw(rgbData,
+				offset + jcache * scanlength + icache, scanlength, canvasData,
+				(y + jcache) * canvasWidth + x + icache, canvasWidth,
+				width - icache, height - jcache, processAlpha)) { return; }
 
 		int rowOffset, destRow;
 
