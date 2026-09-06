@@ -118,6 +118,7 @@ public abstract class PlatformGraphics implements DirectGraphics,
 
 	// com.nttdocomo.opt.ui.Graphics2 variables
 	protected int renderMode = com.nttdocomo.opt.ui.Graphics2.OP_REPL;
+	public static PixelBlitter pixelBlitter;
 	protected int srcRatio = 255, dstRatio = 255;
 
 	// FPS Counter variables
@@ -556,6 +557,14 @@ public abstract class PlatformGraphics implements DirectGraphics,
 
 		final int icache = (x > clipX) ? 0 : (clipX - x);
 		final int jcache = (y > clipY) ? 0 : (clipY - y);
+
+		// Frontends may accelerate a complete clipped rectangle. Other render modes
+		// and unsupported/aliased buffers retain the portable implementation below.
+		if (pixelBlitter != null && (!processAlpha || renderMode == com.nttdocomo.opt.ui.Graphics2.OP_REPL) &&
+			width > icache && height > jcache && pixelBlitter.draw(rgbData,
+				offset + jcache * scanlength + icache, scanlength, canvasData,
+				(y + jcache) * canvasWidth + x + icache, canvasWidth,
+				width - icache, height - jcache, processAlpha)) { return; }
 
 		int rowOffset, destRow;
 
@@ -1941,19 +1950,7 @@ public abstract class PlatformGraphics implements DirectGraphics,
 		{
 			case com.nttdocomo.opt.ui.Graphics2.OP_REPL: // Also used by MIDP, which does this operation by default (SRC_OVER)
 			{
-				if (srcAlpha == 255) { return srcPixel; }
-
-				final int invAlpha = 255 - srcAlpha;
-
-				final int srcRB  = srcPixel & 0x00FF00FF;
-				final int destRB = destPixel & 0x00FF00FF;
-				final int blendedRB = (((srcRB * srcAlpha + destRB * invAlpha) >> 8) & 0x00FF00FF);
-
-				int srcAG = (srcPixel >>> 8) & 0x00FF00FF;
-				int destAG = (destPixel >>> 8) & 0x00FF00FF;
-				int blendedAG = (((srcAG * srcAlpha + destAG * invAlpha)) & 0xFF00FF00);
-
-				return blendedAG | blendedRB;
+				return AlphaCompositor.sourceOver(srcPixel, destPixel);
 			}
 			// ADD and SUB never take alpha into consideration for RGB values
 			case com.nttdocomo.opt.ui.Graphics2.OP_ADD:
