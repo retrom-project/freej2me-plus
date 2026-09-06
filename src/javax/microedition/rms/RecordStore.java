@@ -54,7 +54,7 @@ public class RecordStore
 	private boolean writable, writablebyothers;
 	private int authmode;
 
-	private static String rmsPath;
+	private String rmsPath;
 
 	private String rmsFile;
 
@@ -71,13 +71,14 @@ public class RecordStore
 	private int scratchPadIndex = 0; // DoJa-only, used to differentiate between multiple scratchpads when writing
 
 	private Vector<RecordListener> listeners;
-	private static Vector<String> openedStores = new Vector<String>();
+	private static final Map<String, RecordStore> openedStores = new HashMap<String, RecordStore>();
+	private String storeKey;
 
 	private long lastModified = 0;
 
-	private static int recordsOpened = 0;
+	private int recordsOpened = 0;
 
-	protected static boolean recordStoreIsOpen = false;
+	protected boolean recordStoreIsOpen = false;
 
 	private RecordStore(String recordStoreName, boolean createIfNecessary, String vendorname, String suitename, int authmode, boolean writable, String password) throws RecordStoreException, RecordStoreNotFoundException, SecurityException
 	{
@@ -107,13 +108,8 @@ public class RecordStore
 		this.vendorname = vendorname;
 		this.suitename = suitename;
 
-		try
-		{
-			// For ISO-8859-1 encodings, we'll use UTF-8 for save paths, helps with chinese and special characters
-			rmsPath = new String((Mobile.getPlatform().dataPath + "./rms/"+suitename).getBytes(System.getProperty("file.encoding")), System.getProperty("file.encoding").equals(Mobile.supportedEncodings[Mobile.ISO_8859_1]) ? "UTF-8" : Mobile.textEncoding);
-			rmsFile = rmsPath+"/"+basename+".rms";
-		}
-		catch (UnsupportedEncodingException e) { } // Shouldn't really happen
+		rmsPath = storePath(suitename);
+		rmsFile = rmsPath+"/"+basename+".rms";
 
 		// Check if the record directory exists, if not, create it.
 		try
@@ -148,13 +144,8 @@ public class RecordStore
 		}
 		else { loadRecordStore(createIfNecessary); }
 
-		// If no exceptions were thrown, the record was loaded, set the recordStoreIsOpen flag and increase the counter of opened stores
-		if(!recordStoreIsOpen)
-		{
-			recordStoreIsOpen = true;
-			openedStores.add(this.name);
-		}
-		recordsOpened++;
+		recordStoreIsOpen = true;
+		recordsOpened = 1;
 
 		thisStore = this;
 	}
@@ -280,21 +271,24 @@ public class RecordStore
 
 	public void closeRecordStore() throws RecordStoreNotOpenException
 	{
-		if (!recordStoreIsOpen) { throw new RecordStoreNotOpenException("Record Store is not open at this time"); }
+		synchronized (RecordStore.class)
+		{
+			if (!recordStoreIsOpen) { throw new RecordStoreNotOpenException("Record Store is not open at this time"); }
 
-		Mobile.log(Mobile.LOG_DEBUG, RecordStore.class.getPackage().getName() + "." + RecordStore.class.getSimpleName() + ": " + "> Close Record");
-		if (--recordsOpened > 0) { return; }
+			Mobile.log(Mobile.LOG_DEBUG, RecordStore.class.getPackage().getName() + "." + RecordStore.class.getSimpleName() + ": " + "> Close Record");
+			if (--recordsOpened > 0) { return; }
 
-		Mobile.log(Mobile.LOG_DEBUG, RecordStore.class.getPackage().getName() + "." + RecordStore.class.getSimpleName() + ": " + "> No more stores opened for " + name + ", cleaning up.");
+			Mobile.log(Mobile.LOG_DEBUG, RecordStore.class.getPackage().getName() + "." + RecordStore.class.getSimpleName() + ": " + "> No more stores opened for " + name + ", cleaning up.");
 
-		if (listeners != null) { listeners.removeAllElements(); }
+			if (listeners != null) { listeners.removeAllElements(); }
 
-		records.clear();
-		recordTags.clear();
-		recordIds.clear();
+			records.clear();
+			recordTags.clear();
+			recordIds.clear();
 
-		recordStoreIsOpen = false;
-		openedStores.remove(this.name);
+			recordStoreIsOpen = false;
+			openedStores.remove(storeKey);
+		}
 	}
 
 	public void deleteRecord(int recordId) throws RecordStoreException, SecurityException
@@ -314,14 +308,14 @@ public class RecordStore
 	}
 
 	// This should only delete records that are tied to the current MIDlet suite
-	public static void deleteRecordStore(String recordStoreName) throws RecordStoreException, RecordStoreNotFoundException
+	public static synchronized void deleteRecordStore(String recordStoreName) throws RecordStoreException, RecordStoreNotFoundException
 	{
-		if(openedStores.contains(recordStoreName)) { throw new RecordStoreException("Cannot delete an open record store"); }
+		if(openedStores.containsKey(storeKey(recordStoreName, Mobile.getPlatform().loader.vendorname, Mobile.getPlatform().loader.suitename))) { throw new RecordStoreException("Cannot delete an open record store"); }
 
 		try
 		{
 			Mobile.log(Mobile.LOG_DEBUG, RecordStore.class.getPackage().getName() + "." + RecordStore.class.getSimpleName() + ": " + "Deleting RecordStore "+recordStoreName);
-			File folder = new File(Mobile.getPlatform().dataPath + "./rms/" + Mobile.getPlatform().loader.suitename);
+			File folder = new File(storePath(Mobile.getPlatform().loader.suitename));
 			File[] files = folder.listFiles();
 			boolean exists = false; // For checking whether the recordStore exists or not.
 
@@ -461,16 +455,7 @@ public class RecordStore
 	public static String[] listRecordStores()
 	{
 		Mobile.log(Mobile.LOG_DEBUG, RecordStore.class.getPackage().getName() + "." + RecordStore.class.getSimpleName() + ": " + "List Record Stores");
-		if(rmsPath==null)
-		{
-			try
-			{
-				rmsPath = new String((Mobile.getPlatform().dataPath + "./rms/"+Mobile.getPlatform().loader.suitename).getBytes(System.getProperty("file.encoding")), System.getProperty("file.encoding").equals(Mobile.supportedEncodings[Mobile.ISO_8859_1]) ? "UTF-8" : Mobile.textEncoding);
-				File rmsDir = new File(rmsPath);
-				if (!rmsDir.exists()) { rmsDir.mkdirs(); }
-			}
-			catch (Exception e) { }
-		}
+		String rmsPath = storePath(Mobile.getPlatform().loader.suitename);
 
 		try
 		{
@@ -498,22 +483,54 @@ public class RecordStore
 		return null;
 	}
 
+	private static String storePath(String suiteName)
+	{
+		try
+		{
+			return new String((Mobile.getPlatform().dataPath + "./rms/" + suiteName).getBytes(System.getProperty("file.encoding")), System.getProperty("file.encoding").equals(Mobile.supportedEncodings[Mobile.ISO_8859_1]) ? "UTF-8" : Mobile.textEncoding);
+		}
+		catch (UnsupportedEncodingException e) { throw new IllegalArgumentException(e.toString()); }
+	}
+
+	private static String storeKey(String name, String vendor, String suite)
+	{
+		return new File(storePath(suite)).getAbsolutePath() + "\u0000" + vendor + "\u0000" + name;
+	}
+
+	// MIDP repeated opens share one live store and require one close per open.
+	// Other stores must not keep a closed handle alive or prevent its deletion.
+	private static synchronized RecordStore openStore(String name, boolean create, String vendor, String suite, int authmode, boolean writable, String password) throws RecordStoreException
+	{
+		if (name == null) { throw new NullPointerException("RecordStore received a null argument"); }
+		String key = storeKey(name, vendor, suite);
+		RecordStore store = openedStores.get(key);
+		if (store != null)
+		{
+			store.recordsOpened++;
+			return store;
+		}
+		store = new RecordStore(name, create, vendor, suite, authmode, writable, password);
+		store.storeKey = key;
+		openedStores.put(key, store);
+		return store;
+	}
+
 	public static RecordStore openRecordStore(String recordStoreName, boolean createIfNecessary) throws RecordStoreException, RecordStoreNotFoundException, SecurityException
 	{
 		Mobile.log(Mobile.LOG_DEBUG, RecordStore.class.getPackage().getName() + "." + RecordStore.class.getSimpleName() + ": " + "Open Record Store A "+ createIfNecessary + ": " + recordStoreName);
-		return new RecordStore(recordStoreName, createIfNecessary, Mobile.getPlatform().loader.vendorname, Mobile.getPlatform().loader.suitename, AUTHMODE_PRIVATE, true, "");
+		return openStore(recordStoreName, createIfNecessary, Mobile.getPlatform().loader.vendorname, Mobile.getPlatform().loader.suitename, AUTHMODE_PRIVATE, true, "");
 	}
 
 	public static RecordStore openRecordStore(String recordStoreName, boolean createIfNecessary, int authmode, boolean writable) throws RecordStoreException, RecordStoreNotFoundException, SecurityException
 	{
 		Mobile.log(Mobile.LOG_DEBUG, RecordStore.class.getPackage().getName() + "." + RecordStore.class.getSimpleName() + ": " + "Open Record Store B "+ createIfNecessary + ": " + recordStoreName);
-		return new RecordStore(recordStoreName, createIfNecessary, Mobile.getPlatform().loader.vendorname, Mobile.getPlatform().loader.suitename, authmode, writable, "");
+		return openStore(recordStoreName, createIfNecessary, Mobile.getPlatform().loader.vendorname, Mobile.getPlatform().loader.suitename, authmode, writable, "");
 	}
 
 	public static RecordStore openRecordStore(String recordStoreName, boolean createIfNecessary, int authmode, boolean writable, String password) throws RecordStoreException, RecordStoreNotFoundException, SecurityException
 	{
 		Mobile.log(Mobile.LOG_DEBUG, RecordStore.class.getPackage().getName() + "." + RecordStore.class.getSimpleName() + ": " + "Open Record Store C + pass,auth "+ createIfNecessary + ": " + recordStoreName);
-		return new RecordStore(recordStoreName, createIfNecessary, Mobile.getPlatform().loader.vendorname, Mobile.getPlatform().loader.suitename, authmode, writable, password);
+		return openStore(recordStoreName, createIfNecessary, Mobile.getPlatform().loader.vendorname, Mobile.getPlatform().loader.suitename, authmode, writable, password);
 	}
 
 	/*
@@ -523,13 +540,13 @@ public class RecordStore
 	public static RecordStore openRecordStore(String recordStoreName, String vendorName, String suiteName) throws RecordStoreException, RecordStoreNotFoundException, SecurityException
 	{
 		Mobile.log(Mobile.LOG_DEBUG, RecordStore.class.getPackage().getName() + "." + RecordStore.class.getSimpleName() + ": " + "Open Record Store D:" + recordStoreName);
-		return new RecordStore(recordStoreName, false, vendorName, suiteName, AUTHMODE_PRIVATE, false, "");
+		return openStore(recordStoreName, false, vendorName, suiteName, AUTHMODE_PRIVATE, false, "");
 	}
 
 	public static RecordStore openRecordStore(String recordStoreName, String vendorName, String suiteName, String password) throws RecordStoreException, RecordStoreNotFoundException, SecurityException
 	{
 		Mobile.log(Mobile.LOG_DEBUG, RecordStore.class.getPackage().getName() + "." + RecordStore.class.getSimpleName() + ": " + "Open Record Store E + pass:" + recordStoreName);
-		return new RecordStore(recordStoreName, false, vendorName, suiteName, AUTHMODE_PRIVATE, false, password);
+		return openStore(recordStoreName, false, vendorName, suiteName, AUTHMODE_PRIVATE, false, password);
 	}
 
 	public void addRecordListener(RecordListener listener) { listeners.add(listener); }
