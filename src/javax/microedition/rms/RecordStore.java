@@ -57,6 +57,7 @@ public class RecordStore
 	private String rmsPath;
 
 	private String rmsFile;
+    private RecordStoreStorage storage;
 
 	private File file;
 
@@ -123,6 +124,10 @@ public class RecordStore
 			throw(new RecordStoreException("Problem Creating Record Store Path "+rmsPath));
 		}
 
+        storage = new RecordStoreStorage(new File(rmsPath), basename);
+        try { storage.recover(); }
+        catch (IOException failure) { throw new RecordStoreException("Cannot recover RMS: " + failure); }
+
 		// Load actual record data
 		file = new File(rmsFile);
 
@@ -144,6 +149,7 @@ public class RecordStore
 		}
 		else { loadRecordStore(createIfNecessary); }
 
+		storage.remember(recordSnapshot());
 		recordStoreIsOpen = true;
 		recordsOpened = 1;
 
@@ -227,12 +233,12 @@ public class RecordStore
 		data[offset+7] = (byte)((val)     & 0xFF);
 	}
 
-	public int addRecord(byte[] data, int offset, int numBytes) throws RecordStoreException, RecordStoreFullException, SecurityException
+	public synchronized int addRecord(byte[] data, int offset, int numBytes) throws RecordStoreException, RecordStoreFullException, SecurityException
 	{
 		return addRecord(data, offset, numBytes, 0);
 	}
 
-	public int addRecord(byte[] data, int offset, int numBytes, int tag) throws RecordStoreException, RecordStoreFullException, SecurityException
+	public synchronized int addRecord(byte[] data, int offset, int numBytes, int tag) throws RecordStoreException, RecordStoreFullException, SecurityException
 	{
 		Mobile.log(Mobile.LOG_DEBUG, RecordStore.class.getPackage().getName() + "." + RecordStore.class.getSimpleName() + ": " + "> Add Record "+nextid+ " to "+name + " with tag " + tag + ", length " + numBytes + " and data " + (data != null? Arrays.toString(data) : "null"));
 
@@ -256,7 +262,6 @@ public class RecordStore
 			recordIds.addElement(nextid);
 			recordTags.addElement(tag); // Tag will be tied to the current ID in recordIDs
 
-			for(int i=0; i<listeners.size(); i++) { listeners.get(i).recordAdded(this, nextid); }
 
 			lastModified = System.currentTimeMillis();
 			version++;
@@ -264,12 +269,13 @@ public class RecordStore
 
 			saveRecordStore();
 
+			for(int i=0; i<listeners.size(); i++) { listeners.get(i).recordAdded(this, nextid-1); }
 			return nextid-1; // Return the new record's id, not the next one's.
 		}
 		catch (Exception e) { throw(new RecordStoreException("Can't Add RMS Record: " + e.getMessage())); }
 	}
 
-	public void closeRecordStore() throws RecordStoreNotOpenException
+	public synchronized void closeRecordStore() throws RecordStoreNotOpenException
 	{
 		synchronized (RecordStore.class)
 		{
@@ -291,7 +297,7 @@ public class RecordStore
 		}
 	}
 
-	public void deleteRecord(int recordId) throws RecordStoreException, SecurityException
+	public synchronized void deleteRecord(int recordId) throws RecordStoreException, SecurityException
 	{
 		if(!recordStoreIsOpen) { throw new RecordStoreNotOpenException("Cannot add record, as Record Store is not open"); }
 		if(!Mobile.getPlatform().loader.suitename.equals(this.suitename) && !writablebyothers) { throw new SecurityException("This suite does not have write access to this RecordStore"); }
@@ -385,7 +391,7 @@ public class RecordStore
 		return records.size()-1;
 	}
 
-	public byte[] getRecord(int recordId) throws InvalidRecordIDException, RecordStoreNotOpenException, RecordStoreException
+	public synchronized byte[] getRecord(int recordId) throws InvalidRecordIDException, RecordStoreNotOpenException, RecordStoreException
 	{
 		Mobile.log(Mobile.LOG_DEBUG, RecordStore.class.getPackage().getName() + "." + RecordStore.class.getSimpleName() + ": " + "> getRecord("+recordId+")");
 		if (!recordStoreIsOpen) { throw new RecordStoreNotOpenException("Cannot get the record of a closed Record Store"); }
@@ -397,7 +403,7 @@ public class RecordStore
 		return (t == null || t.length == 0) ? null : t.clone();
 	}
 
-	public int getRecord(int recordId, byte[] buffer, int offset) throws InvalidRecordIDException, RecordStoreNotOpenException, RecordStoreException
+	public synchronized int getRecord(int recordId, byte[] buffer, int offset) throws InvalidRecordIDException, RecordStoreNotOpenException, RecordStoreException
 	{
 		Mobile.log(Mobile.LOG_DEBUG, RecordStore.class.getPackage().getName() + "." + RecordStore.class.getSimpleName() + ": " + "> getRecord(" + recordId + ", " + buffer + ", " + offset + ")");
 		if (!recordStoreIsOpen) { throw new RecordStoreNotOpenException("Cannot get the record of a closed Record Store"); }
@@ -420,7 +426,7 @@ public class RecordStore
 		return recordTags.get(recordIds.indexOf(recordId));
 	}
 
-	public int getRecordSize(int recordId) throws InvalidRecordIDException, RecordStoreNotOpenException, RecordStoreException
+	public synchronized int getRecordSize(int recordId) throws InvalidRecordIDException, RecordStoreNotOpenException, RecordStoreException
 	{
 		Mobile.log(Mobile.LOG_DEBUG, RecordStore.class.getPackage().getName() + "." + RecordStore.class.getSimpleName() + ": " + "> Get Record Size");
 		if (!recordStoreIsOpen) { throw new RecordStoreNotOpenException("Cannot get the record's size on a closed Record Store"); }
@@ -561,12 +567,12 @@ public class RecordStore
 		this.writable = writable;
 	}
 
-	public void setRecord(int recordId, byte[] newData, int offset, int numBytes) throws RecordStoreException, InvalidRecordIDException, SecurityException
+	public synchronized void setRecord(int recordId, byte[] newData, int offset, int numBytes) throws RecordStoreException, InvalidRecordIDException, SecurityException
 	{
 		setRecord(recordId, newData, offset, numBytes, 0);
 	}
 
-	public void setRecord(int recordId, byte[] newData, int offset, int numBytes, int tag) throws RecordStoreException, InvalidRecordIDException, SecurityException
+	public synchronized void setRecord(int recordId, byte[] newData, int offset, int numBytes, int tag) throws RecordStoreException, InvalidRecordIDException, SecurityException
 	{
 		Mobile.log(Mobile.LOG_DEBUG, RecordStore.class.getPackage().getName() + "." + RecordStore.class.getSimpleName() + ": " + "> Set Record "+recordId+" in "+name + " from " + offset + " to " + (offset+numBytes) +  " with tag " + tag);
 		if (!recordStoreIsOpen) { throw new RecordStoreNotOpenException("Cannot set record on a closed Record Store"); }
@@ -786,7 +792,7 @@ public class RecordStore
 				Saving to and loading from disk
 		*********************************************************** */
 
-	public void saveRecordStore()
+	public synchronized void saveRecordStore() throws RecordStoreException
 	{
 		final String ownerVersion = Mobile.isDoJa ? Mobile.getPlatform().loader.getProperty("AppVer") : Mobile.getPlatform().loader.getProperty("MIDlet-Version");
 		String recordName = name; // TODO: For doja, get the sp index
@@ -823,31 +829,31 @@ public class RecordStore
 
 		jsonBuilder.append("\n}"); // JSON has been properly created in memory, now save it to disk
 
-		// TODO: Delete any previously saved data before writing the updated records
-		deleteOutdatedRecords(rmsPath + "/", basename);
+        try {
+            storage.commit(jsonBuilder.toString().getBytes("UTF-8"), recordSnapshot());
+        } catch (IOException failure) {
+            // Keep the shared in-memory instance aligned with the durable store
+            // when a mutation did not cross the metadata commit point.
+            try {
+                records.clear(); recordIds.clear(); recordTags.clear();
+                records.add(new byte[0]); recordIds.add(0); recordTags.add(0);
+                loadRecordStore(false);
+                storage.remember(recordSnapshot());
+            } catch (Exception recovery) {
+                recordStoreIsOpen = false;
+            }
+            throw new RecordStoreException("Cannot persist RMS: " + failure);
+        }
+    }
 
-		// Write the JSON data to disk, as well as the records' binary data
-		try
-		{
-			FileOutputStream fos = new FileOutputStream(rmsPath + "/" + basename + ".rms");
-			fos.write(jsonBuilder.toString().getBytes());
-			fos.close();
-
-			for(int i = 1; i < recordIds.size(); i++) // Write Binary Data
-			{
-				if(records.get(i) == null) { continue; } // Skip records that have been deleted and whose IDs are not to be used anymore
-				fos = new FileOutputStream(rmsPath + "/" + basename + "." + recordIds.get(i));
-				fos.write(records.get(i));
-				fos.close();
-			}
-
-		}
-		catch (Exception e)
-		{
-			Mobile.log(Mobile.LOG_ERROR, RecordStore.class.getPackage().getName() + "." + RecordStore.class.getSimpleName() + ": " + "> Couldn't save RecordStore " + name + " :" + e.getMessage());
-			e.printStackTrace();
-		}
-	}
+    private Map<Integer, byte[]> recordSnapshot() {
+        Map<Integer, byte[]> snapshot = new HashMap<Integer, byte[]>();
+        for (int i = 1; i < recordIds.size(); i++) {
+            byte[] data = records.get(i);
+            if (data != null) snapshot.put(recordIds.get(i), data);
+        }
+        return snapshot;
+    }
 
 	public void loadRecordStore(boolean createIfNecessary) throws RecordStoreException, RecordStoreNotFoundException, SecurityException
 	{

@@ -41,7 +41,7 @@ public class Display
 	public static final int COLOR_BORDER = 4;
 	public static final int COLOR_HIGHLIGHTED_BORDER = 5;
 
-	private Displayable current;
+	private volatile Displayable current;
 
 	private final AtomicReference<Runnable> setCurrentRequest = new AtomicReference<Runnable>();
 	private final AtomicReference<Runnable> paintEvent = new AtomicReference<Runnable>();
@@ -265,101 +265,50 @@ public class Display
 
 	public void setCurrent(final Displayable next)
 	{
-		Runnable runnable = new Runnable()
-		{
-			@Override
-			public void run()
-			{
-				Displayable prev = current;
-				if (next == null || current == next) { return; }
-
-				// Alert and Canvas preparation
-				try
-				{
-					if(next instanceof Alert) { ((Alert) next).setNextScreen(current); }
-
-					// Call upon showNotify right before the new canvas is made visible
-					if (next instanceof Canvas) { ((Canvas) next).showNotify(); }
-				}
-				catch (Exception e)
-				{
-					Mobile.log(Mobile.LOG_ERROR, Display.class.getPackage().getName() + "." + Display.class.getSimpleName() + ": " + "SetCurrent Alert/Canvas preparation block failed: " + e.getMessage());
-					e.printStackTrace();
-				}
-
-				// displayable setup and hideNotify
-				try
-				{
-					// Make the new displayable effective
-					current = next;
-
-					// Call upon hideNotify right after removing the previous canvas from the display
-					if (prev instanceof Canvas) { ((Canvas) prev).hideNotify(); }
-				}
-				catch (Exception e)
-				{
-					Mobile.log(Mobile.LOG_ERROR, Display.class.getPackage().getName() + "." + Display.class.getSimpleName() + ": " + "SetCurrent displayable setup and hideNotify block failed: " + e.getMessage());
-					e.printStackTrace();
-				}
-
-				// Paint displayable block
-				try
-				{
-					// Drop the prior "wait for app to repaint itself" hack, let's do this explicitly
-					if(current instanceof Canvas)
-						{ ((Canvas) current).repaint(0, 0, current.getWidth(), current.getHeight()); }
-					else { current.notifySetCurrent(); } // Displayables other than canvas have drawing dictated entirely by FreeJ2ME, so always force a draw to happen on setCurrent
-				}
-				catch (Exception e)
-				{
-					Mobile.log(Mobile.LOG_ERROR, Display.class.getPackage().getName() + "." + Display.class.getSimpleName() + ": " + "SetCurrent paint block failed: " + e.getMessage());
-					e.printStackTrace();
-				}
-
-				Mobile.log(Mobile.LOG_DEBUG, Display.class.getPackage().getName() + "." + Display.class.getSimpleName() + ": " + "Set Current "+current.width+", "+current.height);
-			}
-		};
-
-		if (Mobile.compatImmediateRepaints || isEventThread()) { runnable.run(); }
-		else
-		{
-			setCurrentRequest.set(runnable);
-			synchronized (eventLock) { eventLock.notifyAll(); }
-		}
+		requestCurrent(next, null);
 	}
 
 	public void setCurrent(final Alert alert, final Displayable next)
 	{
-		if(alert == null || next == null) { throw new NullPointerException("Cannot pass a null alert or next displayable into setCurrent(Alert, Displayable)"); }
-		if(next instanceof Alert) { throw new IllegalArgumentException("Cannot pass an alert as the next screen of another alert in setCurrent(Alert, Displayable)"); }
+		if (alert == null || next == null) { throw new NullPointerException("Alert and next displayable are required"); }
+		if (next instanceof Alert) { throw new IllegalArgumentException("Next displayable must not be an Alert"); }
+		requestCurrent(alert, next);
+	}
 
-		Runnable runnable = new Runnable()
+	private void requestCurrent(final Displayable next, final Displayable afterAlert)
+	{
+		if (next == null) { return; }
+		// Requests coalesce and always return to the event loop, including calls
+		// made by showNotify/hideNotify. Application callbacks must not recurse.
+		setCurrentRequest.set(new Runnable()
 		{
-			@Override
-			public void run()
-			{
-				try
-				{
-					alert.setNextScreen(next);
-					current = alert;
-					current.notifySetCurrent();
+			public void run() { applyCurrent(next, afterAlert); }
+		});
+		synchronized (eventLock) { eventLock.notifyAll(); }
+	}
 
-					Mobile.log(Mobile.LOG_DEBUG, Display.class.getPackage().getName() + "." + Display.class.getSimpleName() + ": " + "Set Current Alert "+current.width+", "+current.height);
-				}
-				catch (Exception e)
-				{
-					Mobile.log(Mobile.LOG_ERROR, Display.class.getPackage().getName() + "." + Display.class.getSimpleName() + ": " + "Problem with setCurrent(alert, next)");
-					e.printStackTrace();
-				}
-			}
-		};
-
-		if (Mobile.compatImmediateRepaints || isEventThread()) { runnable.run(); }
-		else
+	private void applyCurrent(Displayable next, Displayable afterAlert)
+	{
+		Displayable prev = current;
+		if (prev == next) { return; }
+		if (next instanceof Alert) { ((Alert) next).setNextScreen(afterAlert != null ? afterAlert : prev); }
+		current = next;
+		try
 		{
-			setCurrentRequest.set(runnable);
-			synchronized (eventLock) { eventLock.notifyAll(); }
+			if (prev instanceof Canvas) { ((Canvas) prev).hideNotify(); }
 		}
+		catch (Exception e) { e.printStackTrace(); }
+		try
+		{
+			if (next instanceof Canvas) { ((Canvas) next).showNotify(); }
+		}
+		catch (Exception e) { e.printStackTrace(); }
+		try
+		{
+			if (next instanceof Canvas) { ((Canvas) next).repaint(0, 0, next.getWidth(), next.getHeight()); }
+			else { next.notifySetCurrent(); }
+		}
+		catch (Exception e) { e.printStackTrace(); }
 	}
 
 	public void setCurrentItem(final Item item)

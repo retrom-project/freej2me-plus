@@ -30,7 +30,8 @@ import javax.sound.midi.MidiUnavailableException;
 import javax.microedition.media.decoders.NokiaOTTDecoder;
 
 import org.recompile.mobile.Mobile;
-import org.recompile.mobile.PlatformPlayer;
+import javax.microedition.media.PlayerListener;
+import javax.microedition.media.control.VolumeControl;
 
 /* Using references from http://www.j2megame.org/j2meapi/Nokia_UI_API_1_1/com/nokia/mid/sound/Sound.html */
 public class Sound
@@ -61,6 +62,23 @@ public class Sound
 	private int gain = 255;
 
 	private SoundListener listener;
+    private Player listenerPlayer;
+    private final PlayerListener mediaListener = new PlayerListener() {
+        public void playerUpdate(Player source, String event, Object data) {
+            SoundListener current = listener;
+            if (current == null) return;
+            if (PlayerListener.CLOSED.equals(event)) current.soundStateChanged(Sound.this, SOUND_UNINITIALIZED);
+            else if (PlayerListener.STARTED.equals(event)) current.soundStateChanged(Sound.this, SOUND_PLAYING);
+            else if (PlayerListener.STOPPED.equals(event) || PlayerListener.END_OF_MEDIA.equals(event) || PlayerListener.LOOPED.equals(event))
+                current.soundStateChanged(Sound.this, SOUND_STOPPED);
+        }
+    };
+    private void attachListener() {
+        if (player != listenerPlayer) {
+            player.addPlayerListener(mediaListener);
+            listenerPlayer = player;
+        }
+    }
 
 	public Sound(byte[] data, int type) { init(data, type); }
 	
@@ -174,8 +192,8 @@ public class Sound
 			if(players.get(i).getState() == SOUND_PLAYING) { players.get(i).stop(); }
 		}
 		
-		if(((PlatformPlayer)player).nokiaListener != listener) { ((PlatformPlayer) player).setSoundListener(this, listener); }
-		((PlatformPlayer.volumeControl)player.getControl("VolumeControl")).setLevel((int) (gain / 255f * 100f));
+		attachListener();
+		((VolumeControl)player.getControl("VolumeControl")).setLevel((int) (gain / 255f * 100f));
 		player.setLoopCount(loop);
 		player.setMediaTime(0); // A play call always makes the media play from the beginning.
 		player.start();
@@ -196,8 +214,8 @@ public class Sound
 	{
 		if(player == null || getState() == SOUND_UNINITIALIZED || getState() == SOUND_PLAYING) { return; }
 
-		if(((PlatformPlayer)player).nokiaListener != listener) { ((PlatformPlayer) player).setSoundListener(this, listener); }
-		((PlatformPlayer.volumeControl)player.getControl("VolumeControl")).setLevel((int) (gain / 255f * 100f));
+		attachListener();
+		((VolumeControl)player.getControl("VolumeControl")).setLevel((int) (gain / 255f * 100f));
 		player.start(); 
 	}
 
@@ -218,7 +236,7 @@ public class Sound
 	{ 
 		if(player == null || getState() == Sound.SOUND_STOPPED || getState() == Sound.SOUND_UNINITIALIZED) { return; }
 
-		if(((PlatformPlayer)player).nokiaListener != listener) { ((PlatformPlayer) player).setSoundListener(this, listener); }
+		attachListener();
 		player.stop(); 
 	}
 
