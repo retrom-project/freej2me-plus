@@ -7,10 +7,15 @@ import javax.microedition.media.Player;
 import javax.microedition.media.PlayerListener;
 import javax.microedition.media.TimeBase;
 import javax.microedition.media.control.VolumeControl;
+import javax.microedition.media.control.ToneControl;
 
 /** Lightweight MIDP player that avoids loading desktop Java Sound on miniJVM. */
 public final class MiniJvmPlatformPlayer implements Player {
-    private final MiniJvmAudioBackend.Handle handle;
+    private MiniJvmAudioBackend.Handle handle;
+    private int loopCount = 1;
+    private final ToneControl toneControl = new ToneControl() {
+        public void setSequence(byte[] sequence) { replaceTone(sequence); }
+    };
     private final Vector<PlayerListener> listeners = new Vector<PlayerListener>();
     private final MiniJvmVolumeControl volumeControl = new MiniJvmVolumeControl();
     private final String contentType;
@@ -83,6 +88,7 @@ public final class MiniJvmPlatformPlayer implements Player {
         requireOpen();
         if (count == 0 || state == Player.STARTED) throw new IllegalStateException("Invalid loop count state");
         handle.setLoopCount(count);
+        loopCount = count;
     }
 
     public synchronized long setMediaTime(long now) {
@@ -114,10 +120,28 @@ public final class MiniJvmPlatformPlayer implements Player {
     }
 
     public Control getControl(String controlType) {
-        return controlType != null && controlType.indexOf("VolumeControl") >= 0 ? volumeControl : null;
+        if (controlType == null) return null;
+        if (controlType.endsWith("VolumeControl")) return volumeControl;
+        if (controlType.endsWith("ToneControl") && contentType.toLowerCase().contains("tone")) return toneControl;
+        return null;
     }
 
-    public Control[] getControls() { return new Control[] { volumeControl }; }
+    public Control[] getControls() {
+        return contentType.toLowerCase().contains("tone") ? new Control[] {volumeControl, toneControl} : new Control[] {volumeControl};
+    }
+
+    private synchronized void replaceTone(byte[] sequence) {
+        requireOpen();
+        if (state == Player.PREFETCHED || state == Player.STARTED) throw new IllegalStateException("Tone player is prefetched");
+        byte[] midi = MiniJvmToneSequence.toMidi(sequence);
+        try {
+            MiniJvmAudioBackend.Handle replacement = MobilePlatform.miniJvmAudioBackend.create(midi);
+            replacement.setLoopCount(loopCount);
+            replacement.setVolume(volumeControl.isMuted() ? 0 : volumeControl.getLevel());
+            handle.close();
+            handle = replacement;
+        } catch (Exception error) { throw new IllegalArgumentException("Cannot replace tone: " + error); }
+    }
 
     private void requireOpen() {
         if (state == Player.CLOSED) throw new IllegalStateException("Player is closed");
