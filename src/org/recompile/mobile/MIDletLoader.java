@@ -87,8 +87,11 @@ public class MIDletLoader extends URLClassLoader
 	// For the multi-midlet selection screen
 	private PlatformImage platformImage;
 	private Graphics graphics;
-	private static byte selectedMidlet = 0;
-	public static boolean MIDletSelected = false;
+	private static int selectedMidlet = 0;
+    private static MIDletLoader selectionOwner;
+    private volatile boolean awaitingSelection;
+    private int requestedMidlet;
+	public static volatile boolean MIDletSelected = false;
 
 	private static final String[] knownModelStrings =
 	{
@@ -135,6 +138,11 @@ public class MIDletLoader extends URLClassLoader
 	public MIDletLoader(URL url, Map<String, String> descriptorProperties)
 	{
 		super(new URL[] {url} );
+        MIDletSelected = false;
+        selectedMidlet = 0;
+        selectionOwner = this;
+        name = new String[9];
+        jarEntries.clear();
 
 		try 
 		{
@@ -253,7 +261,12 @@ public class MIDletLoader extends URLClassLoader
 		properties.put("m.MIN", "0000000000");
 		properties.put("MIN", "0000000000"); // legacy SK-VM 1.0.x property
 
-		if (className[0] == null) { className[0] = findMainClassInJar(url); }
+		boolean hasEntry = false;
+        for (int i = 0; i < className.length; i++) if (className[i] != null) {
+            if (!hasEntry) selectedMidlet = i;
+            hasEntry = true;
+        }
+        if (!hasEntry) className[0] = findMainClassInJar(url);
 	}
 
 	public static String findMainClassInJar(URL url) 
@@ -325,14 +338,24 @@ public class MIDletLoader extends URLClassLoader
 
 		try
 		{
-			if(className[1] != null) // More than one element, bring up the selection menu
-			{
-				platformImage = MobilePlatform.getLcdBackbuffer();
-				graphics = platformImage.getMIDPGraphics();
-
-				while(!MIDletSelected) { render(); }
-				// keyPress() will run until MIDletSelected becomes true
-			}
+            if (!MIDletSelected) {
+                int count = 0;
+                for (int i = 0; i < className.length; i++) if (className[i] != null) count++;
+                if (requestedMidlet > 0) {
+                    if (requestedMidlet > className.length || className[requestedMidlet - 1] == null)
+                        throw new IllegalArgumentException("MIDlet entry does not exist: " + requestedMidlet);
+                    selectedMidlet = requestedMidlet - 1;
+                } else if (count > 1) {
+                    platformImage = MobilePlatform.getLcdBackbuffer();
+                    graphics = platformImage.getMIDPGraphics();
+                    awaitingSelection = true;
+                    render();
+                    System.out.println("[j2me-web] HOST_STARTUP_SELECTION");
+                    return;
+                } else {
+                    for (int i = 0; i < className.length; i++) if (className[i] != null) { selectedMidlet = i; break; }
+                }
+            }
 
 			// If there's only one midlet, load it straight away
 			MIDletSelected = true;
@@ -358,8 +381,9 @@ public class MIDletLoader extends URLClassLoader
 			}
 			
 		}
-		catch (Exception e)
+		catch (Throwable e)
 		{
+            MobilePlatform.reportStartupFailure("CONSTRUCTOR", e);
 			Mobile.log(Mobile.LOG_ERROR, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + "Problem Constructing " + name + " class: " +className);
 			Mobile.log(Mobile.LOG_ERROR, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + "Reason: "+e.getMessage());
 			e.printStackTrace();
@@ -385,8 +409,9 @@ public class MIDletLoader extends URLClassLoader
 			}
 			start.invoke(Mobile.isDoJa ? IAppliInst : midletInst);
 		}
-		catch (Exception e)
+		catch (Throwable e)
 		{
+            MobilePlatform.reportStartupFailure("START_APP", e);
 			Mobile.log(Mobile.LOG_ERROR, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + "Can't invoke startApp Method: " + e.getMessage());
 			e.printStackTrace();
 			return;
@@ -590,7 +615,15 @@ public class MIDletLoader extends URLClassLoader
 
 		if(!Mobile.isDoJa) 
 		{
-			for(int i = 0; i < 9; i++) // Support loading up to 9 midlets, though i doubt any jar will have more than a few.
+			int lastEntry = 1;
+            for (String key : properties.keySet()) {
+                if (!key.startsWith("MIDlet-")) continue;
+                try { int n = Integer.parseInt(key.substring(7)); if (n > 0 && n <= 9999) lastEntry = Math.max(lastEntry, n); }
+                catch (NumberFormatException ignored) { }
+            }
+            name = new String[lastEntry];
+            className = new String[lastEntry];
+            for(int i = 0; i < lastEntry; i++)
 			{
 				if (properties.containsKey("MIDlet-" + (i+1) )) // Starts from MIDlet-1
 				{
@@ -1376,10 +1409,43 @@ public class MIDletLoader extends URLClassLoader
 		else if (key == Canvas.DOWN || key == Canvas.KEY_NUM8) 
 		{ 
 			selectedMidlet++;
-			if(selectedMidlet > name.length || name[selectedMidlet] == null) { selectedMidlet--; }
+			if(selectedMidlet >= name.length || name[selectedMidlet] == null) { selectedMidlet--; }
 		}
-		else if (key == Canvas.FIRE || key == Canvas.KEY_NUM5) { MIDletSelected = true; }
+		else if (key == Canvas.FIRE || key == Canvas.KEY_NUM5) {
+            if (selectionOwner != null) selectionOwner.selectMidlet(selectedMidlet + 1);
+            return;
+        }
+        if (selectionOwner != null && selectionOwner.awaitingSelection) selectionOwner.render();
 	}
+
+    public void setRequestedMidlet(int number) { requestedMidlet = number; }
+
+    /** Pairs of manifest number and display label; empty outside selection. */
+    public synchronized String[] getStartupChoices() {
+        if (!awaitingSelection) return new String[0];
+        ArrayList<String> choices = new ArrayList<String>();
+        for (int i = 0; i < className.length; i++) if (className[i] != null) {
+            choices.add(Integer.toString(i + 1));
+            choices.add(name[i] == null || name[i].length() == 0 ? "MIDlet-" + (i + 1) : name[i]);
+        }
+        return choices.toArray(new String[choices.size()]);
+    }
+
+    public synchronized void selectMidlet(int number) {
+        if (!awaitingSelection || number <= 0 || number > className.length || className[number - 1] == null)
+            throw new IllegalArgumentException("MIDlet selection is not available: " + number);
+        awaitingSelection = false;
+        selectedMidlet = number - 1;
+        MIDletSelected = true;
+        MobilePlatform.resetReadinessSignals();
+        System.out.println("[j2me-web] HOST_STARTUP_EXECUTING " + number);
+        new Thread(new Runnable() {
+            public void run() {
+                try { start(); }
+                catch (Throwable error) { MobilePlatform.reportStartupFailure("START_APP", error); }
+            }
+        }, "MIDlet-Launcher").start();
+    }
 
 	protected void render() 
 	{

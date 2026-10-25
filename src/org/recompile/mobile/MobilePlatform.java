@@ -197,7 +197,15 @@ public class MobilePlatform
 
 				((Canvas) displayable).showNotify();
 
-				try { Mobile.midlet.callStartApp(); }
+				try {
+                    if (isMiniJvm) new Thread(new Runnable() {
+                        public void run() {
+                            try { Mobile.midlet.callStartApp(); }
+                            catch (Throwable error) { reportStartupFailure("RESUME", error); }
+                        }
+                    }, "MIDlet-Resume").start();
+                    else Mobile.midlet.callStartApp();
+                }
 				catch (Exception e) { e.printStackTrace(); }
 
 				painter.run();
@@ -855,6 +863,12 @@ public class MobilePlatform
 		}
     }
 
+    public static volatile String startupFailure;
+    public static void reportStartupFailure(String stage, Throwable error) {
+        startupFailure = stage + ": " + error;
+        System.out.println("[j2me-web] HOST_BRIDGE_FAILED " + startupFailure);
+    }
+
 	public void runJar()
 	{
 		try
@@ -878,8 +892,9 @@ public class MobilePlatform
 
 			loader.start();
 		}
-		catch (Exception e)
+		catch (Throwable e)
 		{
+            reportStartupFailure("LAUNCH", e);
 			Mobile.log(Mobile.LOG_ERROR, MobilePlatform.class.getPackage().getName() + "." + MobilePlatform.class.getSimpleName() + ": " + "Error Running Jar");
 			e.printStackTrace();
 		}

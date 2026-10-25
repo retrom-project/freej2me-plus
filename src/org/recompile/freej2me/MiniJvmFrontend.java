@@ -94,22 +94,13 @@ public final class MiniJvmFrontend
 		// platform.load() paints its own progress screen; READY must wait for
 		// the first frame submitted by the MIDlet itself.
 		MobilePlatform.resetReadinessSignals();
-		if (profile.threadedMidletStart)
-		{
-			/*
-			 * Some MIDP 1.0 titles never return from startApp() and run their game
-			 * loop directly on the AMS caller.  Isolate only those known titles;
-			 * keeping the default synchronous path avoids changing startup and input
-			 * timing for well-behaved MIDlets.
-			 */
-			Thread midletLauncher = new Thread(new Runnable()
-			{
-				@Override
-				public void run() { platform.runJar(); }
-			}, "MIDlet-Launcher");
-			midletLauncher.start();
-		}
-		else { platform.runJar(); }
+        platform.loader.setRequestedMidlet(profile.midletNumber);
+        // Every application's constructor and startApp run outside the GUI/GLFW
+        // caller. A valid MIDlet may keep startApp active for its entire life.
+        Thread midletLauncher = new Thread(new Runnable() {
+            public void run() { platform.runJar(); }
+        }, "MIDlet-Launcher");
+        midletLauncher.start();
 	}
 
 	/** Validated browser settings kept separate from the desktop config UI. */
@@ -123,11 +114,11 @@ public final class MiniJvmFrontend
 		public final boolean sound;
 		public final String graphicsBackend;
 		public final boolean halfResolution;
-		public final boolean threadedMidletStart;
+		public final int midletNumber;
 
 		private Profile(int width, int height, int frameRate, String phone, int rotation,
 				boolean sound, String graphicsBackend, boolean halfResolution,
-				boolean threadedMidletStart)
+				int midletNumber)
 		{
 			this.width = width;
 			this.height = height;
@@ -137,7 +128,7 @@ public final class MiniJvmFrontend
 			this.sound = sound;
 			this.graphicsBackend = graphicsBackend;
 			this.halfResolution = halfResolution;
-			this.threadedMidletStart = threadedMidletStart;
+			this.midletNumber = midletNumber;
 		}
 
 		public static Profile from(Map<String, String> source, int width, int height, int frameRate)
@@ -152,9 +143,9 @@ public final class MiniJvmFrontend
 			boolean sound = !"off".equals(values.get("sound"));
 			String backend = allowed(values.get("m3g.backend"), BACKEND_VALUES, "auto");
 			boolean halfResolution = "on".equals(values.get("m3g.halfResolution"));
-			boolean threadedMidletStart = "thread".equals(values.get("midlet.launch"));
+			int midletNumber = boundedInt(values.get("midlet.number"), 0, 0, 9999);
 			return new Profile(resolvedWidth, resolvedHeight, resolvedFps, phone, rotation,
-					sound, backend, halfResolution, threadedMidletStart);
+					sound, backend, halfResolution, midletNumber);
 		}
 
 		public void applyTo(Map<String, String> gameSettings, Map<String, String> systemSettings)
